@@ -1,0 +1,33 @@
+package com.eldercare.repository;
+
+import com.eldercare.model.User;
+import com.eldercare.model.enums.UserRole;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
+    List<User> findByRole(UserRole role);
+
+    List<User> findByIsActiveTrue();
+
+    long countByRole(UserRole role);
+
+    long countByIsActive(Boolean isActive);
+
+    long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+
+    long countByCreatedAtAfter(LocalDateTime date);
+
+    Page<User> findByEmailContainingOrFullNameContaining(
+            String email, String fullName, Pageable pageable);
+}
