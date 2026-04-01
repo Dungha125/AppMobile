@@ -6,16 +6,22 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { getById } from '../api/prescriptions';
+import { deleteMedication, deleteSchedule, getById, remove, update } from '../api/prescriptions';
+import { useAlert } from '../utils/showAlert';
+import { useAuth } from '../context/AuthContext';
 
 function formatDate(d) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('vi-VN');
 }
 
-export default function PrescriptionDetailScreen({ route }) {
+export default function PrescriptionDetailScreen({ route, navigation }) {
   const { id } = route.params || {};
+  const { showAlert } = useAlert();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [prescription, setPrescription] = useState(null);
 
@@ -53,6 +59,7 @@ export default function PrescriptionDetailScreen({ route }) {
   }
 
   const meds = prescription.medications || [];
+  const isCaregiver = user?.role === 'CAREGIVER';
 
   return (
     <ScrollView
@@ -68,6 +75,40 @@ export default function PrescriptionDetailScreen({ route }) {
         {prescription.notes ? (
           <Text style={styles.notes}>{prescription.notes}</Text>
         ) : null}
+
+        {isCaregiver && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate('EditPrescription', { id: prescription.id })}
+            >
+              <Text style={styles.actionBtnText}>Sửa</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnDanger]}
+              onPress={() => {
+                Alert.alert('Xoá đơn thuốc', 'Bạn chắc chắn muốn xoá đơn thuốc này?', [
+                  { text: 'Hủy', style: 'cancel' },
+                  {
+                    text: 'Xoá',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await remove(prescription.id);
+                        showAlert({ title: 'Đã xóa', message: 'Đơn thuốc đã được xóa', type: 'success' });
+                        navigation.goBack();
+                      } catch (e) {
+                        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không xóa được', type: 'error' });
+                      }
+                    },
+                  },
+                ]);
+              }}
+            >
+              <Text style={styles.actionBtnTextDanger}>Xoá</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -87,15 +128,63 @@ export default function PrescriptionDetailScreen({ route }) {
               {m.instructions ? (
                 <Text style={styles.medInstructions}>{m.instructions}</Text>
               ) : null}
-              {m.schedules?.length > 0 && (
+              {isCaregiver && m.schedules?.length > 0 && (
                 <View style={styles.schedules}>
                   <Text style={styles.scheduleLabel}>Lịch uống:</Text>
                   {m.schedules.map((s) => (
-                    <Text key={s.id} style={styles.scheduleItem}>
-                      {s.timeOfDay?.substring?.(0, 5) || s.timeOfDay} — Hàng ngày
-                    </Text>
+                    <View key={s.id} style={styles.scheduleRow}>
+                      <Text style={styles.scheduleItem}>
+                        {s.timeOfDay?.substring?.(0, 5) || s.timeOfDay} — Hàng ngày
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert('Xoá lịch', 'Xoá lịch uống này?', [
+                            { text: 'Hủy', style: 'cancel' },
+                            {
+                              text: 'Xoá',
+                              style: 'destructive',
+                              onPress: async () => {
+                                try {
+                                  await deleteSchedule(s.id);
+                                  await load();
+                                } catch (e) {
+                                  showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không xóa được', type: 'error' });
+                                }
+                              },
+                            },
+                          ]);
+                        }}
+                      >
+                        <Text style={styles.delSmall}>Xoá</Text>
+                      </TouchableOpacity>
+                    </View>
                   ))}
                 </View>
+              )}
+
+              {isCaregiver && (
+                <TouchableOpacity
+                  style={styles.delMedBtn}
+                  onPress={() => {
+                    Alert.alert('Xoá thuốc', 'Xoá thuốc này khỏi đơn?', [
+                      { text: 'Hủy', style: 'cancel' },
+                      {
+                        text: 'Xoá',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            await deleteMedication(m.id);
+                            await load();
+                          } catch (e) {
+                            showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không xóa được', type: 'error' });
+                          }
+                        },
+                      },
+                    ]);
+                  }}
+                >
+                  <Text style={styles.delMedText}>Xoá thuốc</Text>
+                </TouchableOpacity>
               )}
             </View>
           ))
@@ -123,6 +212,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '600', color: '#0f766e', marginBottom: 8 },
   meta: { fontSize: 14, color: '#666', marginBottom: 4 },
   notes: { fontSize: 14, color: '#555', marginTop: 12, fontStyle: 'italic' },
+  actionsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  actionBtn: { flex: 1, backgroundColor: '#0f766e', padding: 12, borderRadius: 10, alignItems: 'center' },
+  actionBtnDanger: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca' },
+  actionBtnText: { color: '#fff', fontWeight: '800' },
+  actionBtnTextDanger: { color: '#dc2626', fontWeight: '800' },
   section: {
     backgroundColor: '#fff',
     margin: 16,
@@ -143,4 +237,8 @@ const styles = StyleSheet.create({
   schedules: { marginTop: 8 },
   scheduleLabel: { fontSize: 12, color: '#0f766e', fontWeight: '600' },
   scheduleItem: { fontSize: 12, color: '#666', marginTop: 2 },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  delSmall: { color: '#dc2626', fontWeight: '700', fontSize: 12, paddingVertical: 2, paddingLeft: 12 },
+  delMedBtn: { marginTop: 10, alignSelf: 'flex-start' },
+  delMedText: { color: '#dc2626', fontWeight: '800' },
 });

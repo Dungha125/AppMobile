@@ -83,6 +83,9 @@ export default function CaregiverHomeScreen({ navigation }) {
           <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('Account')}>
             <Text style={styles.chatbotBtnText}>👤 TK</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('ChatList')}>
+            <Text style={styles.chatbotBtnText}>💬 Chat</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('Chatbot')}>
             <Text style={styles.chatbotBtnText}>💊 Thuốc</Text>
           </TouchableOpacity>

@@ -28,26 +28,24 @@ public class AlertService {
         User elderly = userRepository.findById(elderlyId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người cao tuổi"));
 
-        // Optimize: Dùng JOIN FETCH để lấy caregivers một lần thay vì N queries
-        List<User> caregivers = elderlyCaregiverRepository.findByElderlyIdWithCaregiver(elderlyId).stream()
+        List<User> caregivers = elderlyCaregiverRepository.findByElderly(elderly).stream()
                 .map(ec -> ec.getCaregiver())
                 .toList();
 
-        // Batch insert alerts
-        List<Alert> alerts = caregivers.stream()
-                .map(caregiver -> Alert.builder()
-                        .elderly(elderly)
-                        .caregiver(caregiver)
-                        .alertType(type)
-                        .title(title)
-                        .message(message)
-                        .latitude(lat)
-                        .longitude(lng)
-                        .build())
-                .toList();
-
-        List<Alert> savedAlerts = alertRepository.saveAll(alerts);
-        Alert firstAlert = savedAlerts.isEmpty() ? null : savedAlerts.get(0);
+        Alert firstAlert = null;
+        for (User caregiver : caregivers) {
+            Alert alert = Alert.builder()
+                    .elderly(elderly)
+                    .caregiver(caregiver)
+                    .alertType(type)
+                    .title(title)
+                    .message(message)
+                    .latitude(lat)
+                    .longitude(lng)
+                    .build();
+            alert = alertRepository.save(alert);
+            if (firstAlert == null) firstAlert = alert;
+        }
 
         if (type == AlertType.SOS && !caregivers.isEmpty()) {
             String locMsg = message;
@@ -68,9 +66,7 @@ public class AlertService {
     }
 
     public List<Alert> getAlertsByCaregiver(Long caregiverId, int limit) {
-        // Optimize: Dùng JOIN FETCH để lấy elderly info cùng lúc
-        return alertRepository.findByCaregiverIdWithElderlyOrderByCreatedAtDesc(
-                caregiverId, PageRequest.of(0, limit));
+        return alertRepository.findByCaregiverIdOrderByCreatedAtDesc(caregiverId, PageRequest.of(0, limit));
     }
 
     public long getUnreadCount(Long caregiverId) {

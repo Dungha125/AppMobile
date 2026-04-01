@@ -24,16 +24,7 @@ public class SystemConfig {
     @Column(name = "config_value", columnDefinition = "TEXT")
     private String configValue;
 
-    @Column(name = "display_name")
-    private String displayName;
-
-    @Column(name = "category")
-    private String category;
-
     private String description;
-
-    @Column(name = "config_type")
-    private String configType; // boolean, integer, string, etc.
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

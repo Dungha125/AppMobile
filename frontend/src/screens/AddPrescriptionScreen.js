@@ -10,15 +10,31 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../utils/showAlert';
 import { create, addMedication, addSchedule } from '../api/prescriptions';
 
-function toDateStr(d) {
+function toDisplayDate(d) {
   if (!d) return '';
   const x = d instanceof Date ? d : new Date(d);
+  const dd = String(x.getDate()).padStart(2, '0');
+  const mm = String(x.getMonth() + 1).padStart(2, '0');
+  const yyyy = x.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function toIsoDate(display) {
+  if (!display) return null;
+  // expecting dd/MM/yyyy
+  const parts = display.split(/[\/\-\.]/);
+  if (parts.length !== 3) return null;
+  const [dd, mm, yyyy] = parts.map((p) => parseInt(p, 10));
+  if (!dd || !mm || !yyyy) return null;
+  const d = new Date(yyyy, mm - 1, dd);
+  if (Number.isNaN(d.getTime())) return null;
   const pad = (n) => String(n).padStart(2, '0');
-  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export default function AddPrescriptionScreen({ route, navigation }) {
@@ -29,11 +45,13 @@ export default function AddPrescriptionScreen({ route, navigation }) {
   const [title, setTitle] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [notes, setNotes] = useState('');
-  const [startDate, setStartDate] = useState(toDateStr(new Date()));
+  const [startDate, setStartDate] = useState(toDisplayDate(new Date()));
   const [endDate, setEndDate] = useState('');
   const [medName, setMedName] = useState('');
   const [medDosage, setMedDosage] = useState('');
   const [medTime, setMedTime] = useState('08:00');
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
 
   const handleSave = async () => {
     const t = title?.trim();
@@ -42,6 +60,9 @@ export default function AddPrescriptionScreen({ route, navigation }) {
       return;
     }
     if (!elderlyId || !user?.id) return;
+
+    const startIso = toIsoDate(startDate);
+    const endIso = toIsoDate(endDate);
     setSaving(true);
     try {
       const presRes = await create(
@@ -50,8 +71,8 @@ export default function AddPrescriptionScreen({ route, navigation }) {
           title: t,
           doctorName: doctorName.trim() || null,
           notes: notes.trim() || null,
-          startDate: startDate || null,
-          endDate: endDate || null,
+          startDate: startIso,
+          endDate: endIso,
         },
         user.id
       );
@@ -114,19 +135,41 @@ export default function AddPrescriptionScreen({ route, navigation }) {
             placeholder="Tên bác sĩ"
           />
           <Text style={styles.label}>Từ ngày</Text>
-          <TextInput
+          <TouchableOpacity
             style={styles.input}
-            value={startDate}
-            onChangeText={setStartDate}
-            placeholder="YYYY-MM-DD"
-          />
+            onPress={() => setShowStartPicker(true)}
+            activeOpacity={0.8}
+          >
+            <Text>{startDate || 'Chọn ngày (dd/MM/yyyy)'}</Text>
+          </TouchableOpacity>
+          {showStartPicker && (
+            <DateTimePicker
+              mode="date"
+              value={new Date()}
+              onChange={(_, date) => {
+                setShowStartPicker(false);
+                if (date) setStartDate(toDisplayDate(date));
+              }}
+            />
+          )}
           <Text style={styles.label}>Đến ngày</Text>
-          <TextInput
+          <TouchableOpacity
             style={styles.input}
-            value={endDate}
-            onChangeText={setEndDate}
-            placeholder="YYYY-MM-DD"
-          />
+            onPress={() => setShowEndPicker(true)}
+            activeOpacity={0.8}
+          >
+            <Text>{endDate || 'Chọn ngày (dd/MM/yyyy) hoặc để trống'}</Text>
+          </TouchableOpacity>
+          {showEndPicker && (
+            <DateTimePicker
+              mode="date"
+              value={new Date()}
+              onChange={(_, date) => {
+                setShowEndPicker(false);
+                if (date) setEndDate(toDisplayDate(date));
+              }}
+            />
+          )}
           <Text style={styles.label}>Ghi chú</Text>
           <TextInput
             style={[styles.input, styles.textArea]}

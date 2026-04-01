@@ -15,7 +15,6 @@ import { useAlert } from '../utils/showAlert';
 const ROLES = [
   { value: 'ELDERLY', label: 'Người cao tuổi' },
   { value: 'CAREGIVER', label: 'Người giám hộ' },
-  { value: 'ADMIN', label: 'Quản trị viên' },
 ];
 
 export default function RegisterScreen({ navigation }) {

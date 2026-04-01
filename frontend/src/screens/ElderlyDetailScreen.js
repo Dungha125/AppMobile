@@ -226,6 +226,23 @@ export default function ElderlyDetailScreen({ route, navigation }) {
         </View>
       )}
 
+      {user?.role === 'CAREGIVER' && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('ChatList')}
+          >
+            <Text style={styles.actionBtnText}>💬 Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('HealthTimeline', { elderlyId, elderlyName: elderlyUser.fullName })}
+          >
+            <Text style={styles.actionBtnText}>🩺 Hồ sơ sức khoẻ</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Thông tin liên hệ */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Thông tin liên hệ</Text>
@@ -321,30 +338,19 @@ export default function ElderlyDetailScreen({ route, navigation }) {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Lịch sử điểm danh</Text>
-          <Text style={styles.cardSubtitle}>🟢 Chủ động | 🔵 Tự động</Text>
           <Text style={styles.count}>{checkIns.length} lần gần đây</Text>
         </View>
         {checkIns.length === 0 ? (
           <Text style={styles.empty}>Chưa có lịch sử</Text>
         ) : (
-          checkIns.slice(0, 7).map((c) => {
-            const isActive = c.checkInType === 'ACTIVE';
-            return (
-              <View key={c.id} style={styles.listItem}>
-                <View style={styles.checkInRow}>
-                  <View style={[styles.checkInBadge, isActive ? styles.badgeActive : styles.badgePassive]}>
-                    <Text style={styles.checkInBadgeText}>
-                      {isActive ? '🟢 Chủ động' : '🔵 Tự động'}
-                    </Text>
-                  </View>
-                  <Text style={styles.checkInTime}>{formatDate(c.checkedAt)}</Text>
-                </View>
-                {c.notes && (
-                  <Text style={styles.checkInNotes}>{c.notes}</Text>
-                )}
-              </View>
-            );
-          })
+          checkIns.slice(0, 7).map((c) => (
+            <View key={c.id} style={styles.listItem}>
+              <Text style={styles.listTitle}>
+                {c.checkInType === 'ACTIVE' ? 'Chủ động' : 'Thụ động'}
+              </Text>
+              <Text style={styles.listSub}>{formatDate(c.checkedAt)}</Text>
+            </View>
+          ))
         )}
       </View>
 
@@ -533,44 +539,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     marginTop: 2,
-  },
-  checkInRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  checkInBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  badgeActive: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#22c55e',
-  },
-  badgePassive: {
-    backgroundColor: '#dbeafe',
-    borderColor: '#3b82f6',
-  },
-  checkInBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  checkInTime: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  checkInNotes: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  cardSubtitle: {
-    fontSize: 11,
-    color: '#9ca3af',
   },
   empty: {
     color: '#9ca3af',

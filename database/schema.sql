@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS medication_history (
     medication_schedule_id BIGINT NOT NULL,
     scheduled_time TIMESTAMP NOT NULL,
     taken_at TIMESTAMP,
+    reminded_at TIMESTAMP,
     status ENUM('PENDING', 'TAKEN', 'SKIPPED', 'MISSED') DEFAULT 'PENDING',
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -129,11 +130,60 @@ CREATE TABLE IF NOT EXISTS system_config (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     config_key VARCHAR(100) NOT NULL UNIQUE,
     config_value TEXT,
-    display_name VARCHAR(255),
-    category VARCHAR(50),
-    description TEXT,
-    config_type VARCHAR(20) DEFAULT 'string',
+    description VARCHAR(255),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Chat realtime: cuộc hội thoại giữa Người cao tuổi và Người giám hộ
+CREATE TABLE IF NOT EXISTS conversations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    elderly_id BIGINT NOT NULL,
+    caregiver_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_conversation_pair (elderly_id, caregiver_id),
+    FOREIGN KEY (elderly_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (caregiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Chat realtime: tin nhắn trong hội thoại (text/ảnh + AI note món ăn)
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    conversation_id BIGINT NOT NULL,
+    sender_id BIGINT NOT NULL,
+    text TEXT,
+    image_url VARCHAR(1000),
+    ai_food_items_json TEXT,
+    ai_note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Push token / thiết bị đăng nhập (mở rộng thêm thông tin thiết bị + revoke)
+-- (Nếu bảng device_tokens đã tồn tại, backend dùng JPA ddl-auto=update sẽ tự thêm cột tương ứng.)
+ALTER TABLE device_tokens
+    ADD COLUMN IF NOT EXISTS device_info VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP NULL,
+    ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP NULL;
+
+-- Hồ sơ sức khoẻ: các lần ghi chỉ số theo giai đoạn
+CREATE TABLE IF NOT EXISTS health_entries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    elderly_id BIGINT NOT NULL,
+    recorded_by BIGINT NOT NULL,
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    systolic INT,
+    diastolic INT,
+    heart_rate INT,
+    blood_glucose DECIMAL(6,2),
+    temperature DECIMAL(4,1),
+    weight DECIMAL(6,2),
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (elderly_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Bảng thiết bị đăng nhập
@@ -147,23 +197,8 @@ CREATE TABLE IF NOT EXISTS user_devices (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Bảng audit logs (Admin)
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    action VARCHAR(100) NOT NULL,
-    entity_type VARCHAR(100),
-    entity_id BIGINT,
-    user_id BIGINT,
-    details TEXT,
-    ip_address VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-);
-
 -- Index cho truy vấn nhanh
 CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_is_active ON users(is_active);
-CREATE INDEX idx_users_created_at ON users(created_at);
 CREATE INDEX idx_elderly_caregiver_elderly ON elderly_caregiver(elderly_id);
 CREATE INDEX idx_elderly_caregiver_caregiver ON elderly_caregiver(caregiver_id);
 CREATE INDEX idx_prescriptions_elderly ON prescriptions(elderly_id);
@@ -172,14 +207,12 @@ CREATE INDEX idx_check_ins_elderly ON check_ins(elderly_id);
 CREATE INDEX idx_check_ins_checked_at ON check_ins(checked_at);
 CREATE INDEX idx_alerts_caregiver ON alerts(caregiver_id);
 CREATE INDEX idx_alerts_created_at ON alerts(created_at);
-CREATE INDEX idx_alerts_is_read ON alerts(is_read);
-CREATE INDEX idx_alerts_alert_type ON alerts(alert_type);
-CREATE INDEX idx_medication_history_status ON medication_history(status);
-CREATE INDEX idx_medication_history_created_at ON medication_history(created_at);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
-CREATE INDEX idx_system_config_key ON system_config(config_key);
+CREATE INDEX idx_conversations_elderly ON conversations(elderly_id);
+CREATE INDEX idx_conversations_caregiver ON conversations(caregiver_id);
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX idx_messages_created_at ON messages(created_at);
+CREATE INDEX idx_health_entries_elderly ON health_entries(elderly_id);
+CREATE INDEX idx_health_entries_recorded_at ON health_entries(recorded_at);
 
 -- Tài khoản admin: đăng nhập email "admin" / mật khẩu "admin123"
 -- Nếu đăng nhập không được, tạo hash mới: trong thư mục backend chạy:

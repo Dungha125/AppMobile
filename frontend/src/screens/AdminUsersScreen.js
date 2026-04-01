@@ -62,27 +62,10 @@ export default function AdminUsersScreen({ navigation }) {
 
   const toggleActive = async (u) => {
     try {
-      const newActiveState = !u.isActive;
-      console.log(`Toggling user ${u.id} (${u.email}): isActive ${u.isActive} -> ${newActiveState}`);
-      
-      const response = await updateAdminUser(u.id, { isActive: newActiveState });
-      console.log('Update response:', response.data);
-      
-      showAlert({ 
-        title: 'Thành công', 
-        message: `Đã ${newActiveState ? 'mở khóa' : 'khóa'} tài khoản ${u.email}`, 
-        type: 'success' 
-      });
-      
+      await updateAdminUser(u.id, { isActive: !u.isActive });
       await load();
     } catch (e) {
-      console.error('Toggle active error:', e);
-      console.error('Error response:', e.response?.data);
-      showAlert({ 
-        title: 'Lỗi', 
-        message: e.response?.data?.message || 'Không cập nhật được', 
-        type: 'error' 
-      });
+      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không cập nhật được', type: 'error' });
     }
   };
 

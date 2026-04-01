@@ -36,14 +36,14 @@ public class PrescriptionService {
     }
 
     public Prescription findById(Long id) {
-        // Optimize: Lấy prescription với medications và schedules một lần
-        return prescriptionRepository.findByIdWithMedications(id)
+        return prescriptionRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn thuốc"));
     }
 
     public List<Prescription> findByElderlyId(Long elderlyId) {
-        // Optimize: JOIN FETCH medications và schedules để tránh N+1 queries
-        return prescriptionRepository.findByElderlyIdWithMedications(elderlyId);
+        User elderly = userRepository.findById(elderlyId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người cao tuổi"));
+        return prescriptionRepository.findByElderlyOrderByCreatedAtDesc(elderly);
     }
 
     @Transactional
@@ -65,5 +65,37 @@ public class PrescriptionService {
                 .isActive(true)
                 .build();
         return scheduleRepository.save(schedule);
+    }
+
+    @Transactional
+    public Medication updateMedication(Long medicationId, Medication updates) {
+        Medication m = medicationRepository.findById(medicationId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thuốc"));
+        if (updates.getName() != null) m.setName(updates.getName());
+        if (updates.getDosage() != null) m.setDosage(updates.getDosage());
+        if (updates.getUnit() != null) m.setUnit(updates.getUnit());
+        if (updates.getQuantity() != null) m.setQuantity(updates.getQuantity());
+        if (updates.getInstructions() != null) m.setInstructions(updates.getInstructions());
+        return medicationRepository.save(m);
+    }
+
+    @Transactional
+    public void deleteMedication(Long medicationId) {
+        medicationRepository.deleteById(medicationId);
+    }
+
+    @Transactional
+    public MedicationSchedule updateSchedule(Long scheduleId, LocalTime timeOfDay, Integer reminderMinutesBefore, Boolean isActive) {
+        MedicationSchedule s = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch uống"));
+        if (timeOfDay != null) s.setTimeOfDay(timeOfDay);
+        if (reminderMinutesBefore != null) s.setReminderMinutesBefore(reminderMinutesBefore);
+        if (isActive != null) s.setIsActive(isActive);
+        return scheduleRepository.save(s);
+    }
+
+    @Transactional
+    public void deleteSchedule(Long scheduleId) {
+        scheduleRepository.deleteById(scheduleId);
     }
 }

@@ -68,6 +68,13 @@ export default function AccountScreen({ navigation }) {
         </View>
       </View>
 
+      <TouchableOpacity
+        style={styles.secondaryBtn}
+        onPress={() => navigation.navigate('Devices')}
+      >
+        <Text style={styles.secondaryBtnText}>Thiết bị đăng nhập</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
         <Text style={styles.logoutText}>Đăng xuất</Text>
       </TouchableOpacity>
@@ -104,4 +111,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  secondaryBtn: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  secondaryBtnText: { color: '#0f766e', fontSize: 16, fontWeight: '700' },
 });

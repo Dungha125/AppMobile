@@ -1,9 +1,11 @@
 package com.eldercare.service;
 
+import com.eldercare.model.DeviceToken;
 import com.eldercare.model.ElderlyCaregiver;
 import com.eldercare.model.ElderlyProfile;
 import com.eldercare.model.User;
 import com.eldercare.model.enums.UserRole;
+import com.eldercare.repository.DeviceTokenRepository;
 import com.eldercare.repository.ElderlyCaregiverRepository;
 import com.eldercare.repository.ElderlyProfileRepository;
 import com.eldercare.repository.UserRepository;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,23 +24,25 @@ public class UserService {
     private final UserRepository userRepository;
     private final ElderlyProfileRepository elderlyProfileRepository;
     private final ElderlyCaregiverRepository elderlyCaregiverRepository;
+    private final DeviceTokenRepository deviceTokenRepository;
+    private final AlertService alertService;
+    private final PushService pushService;
 
-    @Transactional(readOnly = true)
     public User findById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
     }
 
-    @Transactional(readOnly = true)
     public List<User> getLinkedElderly(Long caregiverId) {
-        return elderlyCaregiverRepository.findByCaregiverIdWithElderly(caregiverId).stream()
+        User caregiver = findById(caregiverId);
+        return elderlyCaregiverRepository.findByCaregiver(caregiver).stream()
                 .map(ElderlyCaregiver::getElderly)
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public List<User> getLinkedCaregivers(Long elderlyId) {
-        return elderlyCaregiverRepository.findByElderlyIdWithCaregiver(elderlyId).stream()
+        User elderly = findById(elderlyId);
+        return elderlyCaregiverRepository.findByElderly(elderly).stream()
                 .map(ElderlyCaregiver::getCaregiver)
                 .collect(Collectors.toList());
     }
@@ -84,7 +89,6 @@ public class UserService {
         return elderlyProfileRepository.save(profile);
     }
 
-    @Transactional(readOnly = true)
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }

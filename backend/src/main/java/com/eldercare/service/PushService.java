@@ -1,6 +1,5 @@
 package com.eldercare.service;
 
-import com.eldercare.model.User;
 import com.eldercare.repository.DeviceTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +23,7 @@ public class PushService {
         if (userIds == null || userIds.isEmpty()) return;
         Set<String> tokens = new HashSet<>();
         for (Long userId : userIds) {
-            deviceTokenRepository.findByUserId(userId)
+            deviceTokenRepository.findByUserIdAndRevokedAtIsNull(userId)
                     .stream()
                     .map(dt -> dt.getToken())
                     .filter(t -> t != null && t.startsWith("ExponentPushToken"))

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface MedicationHistoryRepository extends JpaRepository<MedicationHistory, Long> {
 
@@ -14,6 +15,7 @@ public interface MedicationHistoryRepository extends JpaRepository<MedicationHis
     List<MedicationHistory> findByMedicationSchedule_Medication_Prescription_Elderly_IdAndScheduledTimeBetween(
             Long elderlyId, LocalDateTime start, LocalDateTime end);
 
-    long countByStatusAndCreatedAtBetween(
-            MedicationHistoryStatus status, LocalDateTime start, LocalDateTime end);
+    Optional<MedicationHistory> findByMedicationScheduleIdAndScheduledTime(Long scheduleId, LocalDateTime scheduledTime);
+
+    List<MedicationHistory> findByStatusAndScheduledTimeBefore(MedicationHistoryStatus status, LocalDateTime before);
 }

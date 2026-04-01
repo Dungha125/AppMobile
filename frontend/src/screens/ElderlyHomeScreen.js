@@ -14,7 +14,7 @@ import { useAlert } from '../utils/showAlert';
 import { getByElderly } from '../api/prescriptions';
 import { getByElderly as getCheckIns } from '../api/checkIns';
 import { getByElderly as getMedHistory } from '../api/medicationHistory';
-import { confirmTaken } from '../api/medicationHistory';
+import { confirmTaken, skip } from '../api/medicationHistory';
 import { sendSos } from '../api/alerts';
 import { create } from '../api/checkIns';
 
@@ -92,7 +92,7 @@ export default function ElderlyHomeScreen({ navigation }) {
     const set = new Set();
     const norm = (s) => (s || '').replace(/\.\d+Z?$/, '').substring(0, 16);
     (medHistory || []).forEach((h) => {
-      const sid = h.medicationSchedule?.id;
+      const sid = h.medicationScheduleId || h.medicationSchedule?.id;
       if (sid && h.scheduledTime) set.add(`${sid}-${norm(h.scheduledTime)}`);
     });
     return set;
@@ -138,6 +138,19 @@ export default function ElderlyHomeScreen({ navigation }) {
     }
   };
 
+  const handleSkipMed = async (slot) => {
+    if (slot.taken) return;
+    setConfirming(slot.key);
+    try {
+      await skip(slot.scheduleId, slot.scheduledTime, 'SKIPPED');
+      await load();
+    } catch (e) {
+      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không thể bỏ qua', type: 'error' });
+    } finally {
+      setConfirming(null);
+    }
+  };
+
   const [sosSending, setSosSending] = useState(false);
   const handleSos = async () => {
     if (sosSending) return;
@@ -177,6 +190,12 @@ export default function ElderlyHomeScreen({ navigation }) {
           <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('Account')}>
             <Text style={styles.chatbotBtnText}>👤 TK</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('ChatList')}>
+            <Text style={styles.chatbotBtnText}>💬 Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('HealthTimeline', { elderlyId: user?.id, elderlyName: user?.fullName })}>
+            <Text style={styles.chatbotBtnText}>🩺 Sức khoẻ</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.chatbotBtn} onPress={() => navigation.navigate('Chatbot')}>
             <Text style={styles.chatbotBtnText}>💊 Thuốc</Text>
           </TouchableOpacity>
@@ -214,6 +233,15 @@ export default function ElderlyHomeScreen({ navigation }) {
               ) : (
                 <View style={styles.medSlotRight}>
                   <Text style={styles.medSlotPending}>Chưa uống</Text>
+                  {user?.role === 'CAREGIVER' && (
+                    <TouchableOpacity
+                      style={[styles.medSlotSkipBtn, confirming === slot.key && styles.medSlotBtnDisabled]}
+                      onPress={() => handleSkipMed(slot)}
+                      disabled={confirming === slot.key}
+                    >
+                      <Text style={styles.medSlotSkipText}>Bỏ qua</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={[styles.medSlotBtn, confirming === slot.key && styles.medSlotBtnDisabled]}
                     onPress={() => handleConfirmMed(slot)}
@@ -375,6 +403,17 @@ const styles = StyleSheet.create({
   },
   medSlotBtnDisabled: { opacity: 0.7 },
   medSlotBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  medSlotSkipBtn: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  medSlotSkipText: { color: '#374151', fontSize: 13, fontWeight: '700' },
   medSlotDoneWrap: {
     backgroundColor: '#dcfce7',
     paddingHorizontal: 14,

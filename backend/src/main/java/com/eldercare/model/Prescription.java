@@ -51,9 +51,8 @@ public class Prescription {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @OneToMany(mappedBy = "prescription", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "prescription", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"prescription"})
-    @org.hibernate.annotations.BatchSize(size = 10)
     @Builder.Default
     private List<Medication> medications = new ArrayList<>();
 

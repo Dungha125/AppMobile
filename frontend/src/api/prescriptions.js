@@ -13,3 +13,15 @@ export const addSchedule = (medicationId, timeOfDay, reminderMinutesBefore = 15)
     timeOfDay,
     reminderMinutesBefore,
   });
+
+export const updateMedication = (medicationId, data) =>
+  api.put(`/prescriptions/medications/${medicationId}`, data);
+
+export const deleteMedication = (medicationId) =>
+  api.delete(`/prescriptions/medications/${medicationId}`);
+
+export const updateSchedule = (scheduleId, data) =>
+  api.put(`/prescriptions/schedules/${scheduleId}`, data);
+
+export const deleteSchedule = (scheduleId) =>
+  api.delete(`/prescriptions/schedules/${scheduleId}`);

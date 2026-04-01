@@ -6,6 +6,13 @@ export const confirmTaken = (scheduleId, scheduledTime) =>
     scheduledTime: typeof scheduledTime === 'string' ? scheduledTime : scheduledTime?.toISOString?.(),
   });
 
+export const skip = (scheduleId, scheduledTime, notes = null) =>
+  api.post('/medication-history/skip', {
+    scheduleId,
+    scheduledTime: typeof scheduledTime === 'string' ? scheduledTime : scheduledTime?.toISOString?.(),
+    notes,
+  });
+
 function toISOLocal(d) {
   if (!d) return null;
   const x = d instanceof Date ? d : new Date(d);

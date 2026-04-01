@@ -29,7 +29,11 @@ public class MedicationHistory {
     @Column(name = "taken_at")
     private LocalDateTime takenAt;
 
+    @Column(name = "reminded_at")
+    private LocalDateTime remindedAt;
+
     @Enumerated(EnumType.STRING)
+    @Builder.Default
     private MedicationHistoryStatus status = MedicationHistoryStatus.PENDING;
 
     @Column(columnDefinition = "TEXT")

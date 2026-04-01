@@ -37,9 +37,8 @@ public class Medication {
     @Column(columnDefinition = "TEXT")
     private String instructions;
 
-    @OneToMany(mappedBy = "medication", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "medication", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"medication"})
-    @org.hibernate.annotations.BatchSize(size = 10)
     @Builder.Default
     private List<MedicationSchedule> schedules = new ArrayList<>();
 }

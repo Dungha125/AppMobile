@@ -1,64 +1,45 @@
 package com.eldercare.controller;
 
 import com.eldercare.dto.ApiResponse;
-import com.eldercare.dto.UserDto;
 import com.eldercare.model.ElderlyProfile;
 import com.eldercare.model.User;
 import com.eldercare.security.CurrentUser;
 import com.eldercare.service.UserService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
-@Slf4j
 public class UserController {
 
     private final UserService userService;
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<UserDto>> getCurrentUser(@AuthenticationPrincipal CurrentUser currentUser) {
-        log.info("GET /users/me called, currentUser: {}", currentUser != null ? currentUser.getUserId() : "null");
-        
+    public ResponseEntity<ApiResponse<User>> getCurrentUser(@AuthenticationPrincipal CurrentUser currentUser) {
         if (currentUser == null) {
-            log.warn("No authentication found");
             return ResponseEntity.status(401).body(ApiResponse.error("Chưa đăng nhập"));
         }
-        
-        try {
-            User user = userService.findById(currentUser.getUserId());
-            log.info("Found user: id={}, email={}, role={}", user.getId(), user.getEmail(), user.getRole());
-            return ResponseEntity.ok(ApiResponse.success(UserDto.fromUser(user)));
-        } catch (Exception e) {
-            log.error("Error in getCurrentUser", e);
-            return ResponseEntity.status(500).body(ApiResponse.error("Lỗi server: " + e.getMessage()));
-        }
+        User user = userService.findById(currentUser.getUserId());
+        user.setPasswordHash(null);
+        return ResponseEntity.ok(ApiResponse.success(user));
     }
 
     @GetMapping("/linked-elderly")
-    public ResponseEntity<ApiResponse<List<UserDto>>> getLinkedElderly(@RequestParam Long caregiverId) {
+    public ResponseEntity<ApiResponse<List<User>>> getLinkedElderly(@RequestParam Long caregiverId) {
         List<User> elderly = userService.getLinkedElderly(caregiverId);
-        List<UserDto> dtos = elderly.stream()
-                .map(UserDto::fromUser)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.success(dtos));
+        return ResponseEntity.ok(ApiResponse.success(elderly));
     }
 
     @GetMapping("/linked-caregivers")
-    public ResponseEntity<ApiResponse<List<UserDto>>> getLinkedCaregivers(@RequestParam Long elderlyId) {
+    public ResponseEntity<ApiResponse<List<User>>> getLinkedCaregivers(@RequestParam Long elderlyId) {
         List<User> caregivers = userService.getLinkedCaregivers(elderlyId);
-        List<UserDto> dtos = caregivers.stream()
-                .map(UserDto::fromUser)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.success(dtos));
+        return ResponseEntity.ok(ApiResponse.success(caregivers));
     }
 
     @PostMapping("/link")

@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { login as apiLogin, register as apiRegister } from '../api/auth';
 import api from '../api/client';
-import passiveCheckInService from '../services/PassiveCheckInService';
+import { registerDevice } from '../api/devices';
 
 const AuthContext = createContext(null);
 
@@ -14,60 +17,52 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
-  // Trigger PASSIVE check-in khi user thay đổi (login)
-  useEffect(() => {
-    if (user && user.role === 'ELDERLY') {
-      console.log('👤 User logged in as ELDERLY, enabling PASSIVE check-in');
-      passiveCheckInService.onAppOpen(user.id);
-    }
-  }, [user]);
-
   const loadUser = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       const userStr = await AsyncStorage.getItem('user');
-      
       if (token && userStr) {
-        const cachedUser = JSON.parse(userStr);
-        setUser(cachedUser);
-        setLoading(false); // ✅ Set loading false NGAY, không chờ API
-        
-        // Refresh user data từ server trong background (không block UI)
-        // Chỉ refresh nếu cần, không làm mỗi lần load
-        const lastRefresh = await AsyncStorage.getItem('lastUserRefresh');
-        const now = Date.now();
-        const ONE_HOUR = 60 * 60 * 1000;
-        
-        // Chỉ refresh nếu > 1 giờ từ lần cuối
-        if (!lastRefresh || (now - parseInt(lastRefresh)) > ONE_HOUR) {
-          setTimeout(async () => {
-            try {
-              console.log('🔄 Refreshing user data in background...');
-              const res = await api.get('/users/me');
-              if (res.data?.data) {
-                const u = res.data.data;
-                console.log('✓ User data refreshed from server');
-                setUser(u);
-                await AsyncStorage.setItem('user', JSON.stringify(u));
-                await AsyncStorage.setItem('lastUserRefresh', now.toString());
-              }
-            } catch (e) {
-              // Silent fail - không làm gì cả
-              console.log('⚠️ Background refresh failed (OK to ignore)');
-            }
-          }, 2000); // Delay 2 giây để UI load trước
-        } else {
-          console.log('✓ Using cached user (refreshed recently)');
+        setUser(JSON.parse(userStr));
+        const res = await api.get('/users/me');
+        if (res.data?.data) {
+          const u = res.data.data;
+          setUser(u);
+          await AsyncStorage.setItem('user', JSON.stringify(u));
         }
       } else {
         setUser(null);
-        setLoading(false);
       }
     } catch (e) {
-      console.error('Error in loadUser:', e);
       setUser(null);
+    } finally {
       setLoading(false);
     }
+  };
+
+  const registerPushTokenIfPossible = async () => {
+    try {
+      if (Platform.OS === 'web') return;
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const perm = await Notifications.getPermissionsAsync();
+      let status = perm.status;
+      if (status !== 'granted') {
+        const req = await Notifications.requestPermissionsAsync();
+        status = req.status;
+      }
+      if (status !== 'granted') return;
+
+      const projectId =
+        Constants?.expoConfig?.extra?.eas?.projectId ||
+        Constants?.easConfig?.projectId ||
+        Constants?.expoConfig?.owner; // fallback, không chắc chắn
+      const expoToken = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+      if (!expoToken) return;
+
+      const deviceInfo = `${Platform.OS} ${Platform.Version || ''}`.trim();
+      await registerDevice({ token: expoToken, platform: Platform.OS, deviceInfo });
+    } catch (_) {}
   };
 
   const login = async (email, password) => {
@@ -83,6 +78,7 @@ export const AuthProvider = ({ children }) => {
       role: data.role,
     }));
     setUser({ id: data.userId, email: data.email, fullName: data.fullName, role: data.role });
+    await registerPushTokenIfPossible();
   };
 
   const register = async (data) => {
@@ -98,6 +94,7 @@ export const AuthProvider = ({ children }) => {
       role: d.role,
     }));
     setUser({ id: d.userId, email: d.email, fullName: d.fullName, role: d.role });
+    await registerPushTokenIfPossible();
   };
 
   const logout = async () => {
