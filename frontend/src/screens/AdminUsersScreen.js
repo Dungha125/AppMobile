@@ -11,6 +11,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useAlert } from '../utils/showAlert';
 import { getAdminUsers, updateAdminUser } from '../api/admin';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 const ROLE_LABELS = { ELDERLY: 'NCT', CAREGIVER: 'CS', ADMIN: 'Admin' };
 
@@ -21,18 +22,22 @@ export default function AdminUsersScreen({ navigation }) {
   const [filter, setFilter] = useState(''); // '' | ELDERLY | CAREGIVER | ADMIN
   const [search, setSearch] = useState('');
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await getAdminUsers();
       setUsers(res.data?.data || []);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được danh sách', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được danh sách', type: 'error' });
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useSilentPolling(load, [], 3000, false);
 
   useFocusEffect(
     React.useCallback(() => {

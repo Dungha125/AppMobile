@@ -1,6 +1,7 @@
 package com.eldercare.controller;
 
 import com.eldercare.dto.ApiResponse;
+import com.eldercare.dto.AlertDto;
 import com.eldercare.model.Alert;
 import com.eldercare.service.AlertService;
 import lombok.RequiredArgsConstructor;
@@ -19,20 +20,20 @@ public class AlertController {
     private final AlertService alertService;
 
     @PostMapping("/sos")
-    public ResponseEntity<ApiResponse<Alert>> sos(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<ApiResponse<AlertDto>> sos(@RequestBody Map<String, Object> body) {
         Long elderlyId = Long.valueOf(body.get("elderlyId").toString());
         BigDecimal lat = body.get("latitude") != null ? new BigDecimal(body.get("latitude").toString()) : null;
         BigDecimal lng = body.get("longitude") != null ? new BigDecimal(body.get("longitude").toString()) : null;
 
         Alert alert = alertService.createSosAlert(elderlyId, lat, lng);
-        return ResponseEntity.ok(ApiResponse.success(alert));
+        return ResponseEntity.ok(ApiResponse.success(AlertDto.fromEntity(alert)));
     }
 
     @GetMapping("/caregiver/{caregiverId}")
-    public ResponseEntity<ApiResponse<List<Alert>>> getByCaregiver(@PathVariable Long caregiverId,
-                                                                   @RequestParam(defaultValue = "50") int limit) {
+    public ResponseEntity<ApiResponse<List<AlertDto>>> getByCaregiver(@PathVariable Long caregiverId,
+                                                                      @RequestParam(defaultValue = "50") int limit) {
         List<Alert> list = alertService.getAlertsByCaregiver(caregiverId, limit);
-        return ResponseEntity.ok(ApiResponse.success(list));
+        return ResponseEntity.ok(ApiResponse.success(list.stream().map(AlertDto::fromEntity).toList()));
     }
 
     @GetMapping("/caregiver/{caregiverId}/unread-count")

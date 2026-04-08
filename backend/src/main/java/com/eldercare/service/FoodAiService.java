@@ -1,5 +1,9 @@
 package com.eldercare.service;
 
+import com.google.genai.Client;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Part;
 import com.eldercare.model.SystemConfig;
 import com.eldercare.repository.SystemConfigRepository;
 import lombok.AllArgsConstructor;
@@ -8,11 +12,15 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Base64;
 import java.util.List;
@@ -33,6 +41,12 @@ public class FoodAiService {
     @Value("${ai.openai.model:gpt-4o-mini}")
     private String openAiModel;
 
+    @Value("${ai.google.apiKey:}")
+    private String googleApiKeyFromProps;
+
+    @Value("${ai.google.model:gemini-2.5-flash}")
+    private String googleModel;
+
     @Data
     @Builder
     @AllArgsConstructor
@@ -43,9 +57,10 @@ public class FoodAiService {
 
     public Optional<FoodAiResult> analyzeMealImage(byte[] imageBytes, String mimeType) {
         String provider = getConfig("ai_provider").orElse("openai").trim().toLowerCase();
-        if (!provider.equals("openai")) {
-            return Optional.empty();
+        if (provider.equals("google") || provider.equals("gemini") || provider.equals("google_ai_studio")) {
+            return analyzeWithGemini(imageBytes, mimeType);
         }
+        if (!provider.equals("openai")) return Optional.empty();
 
         String apiKey = getConfig("ai_api_key").orElse(openAiApiKeyFromProps);
         if (apiKey == null || apiKey.isBlank()) {
@@ -54,10 +69,10 @@ public class FoodAiService {
 
         String prompt = getConfig("ai_food_prompt_template").orElse(
                 "Bạn là chuyên gia dinh dưỡng. Hãy đọc ảnh bữa ăn và trả về JSON liệt kê các món ăn/đồ uống nhìn thấy.\n" +
-                "Yêu cầu:\n" +
-                "- Chỉ trả về JSON thuần, không markdown.\n" +
-                "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
-                "- note: 1 câu ngắn mô tả tổng quan.\n"
+                        "Yêu cầu:\n" +
+                        "- Chỉ trả về JSON thuần, không markdown.\n" +
+                        "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
+                        "- note: 1 câu ngắn mô tả tổng quan.\n"
         );
 
         String b64 = Base64.getEncoder().encodeToString(imageBytes);
@@ -103,11 +118,9 @@ public class FoodAiService {
             if (!(contentObj instanceof String content)) return Optional.empty();
 
             String json = content.trim();
-            String note = null;
-            // MVP: lưu toàn bộ JSON vào foodItemsJson; note có thể để client parse hoặc giữ nguyên json
             return Optional.of(FoodAiResult.builder()
                     .foodItemsJson(json)
-                    .note(note)
+                    .note(null)
                     .build());
         } catch (HttpStatusCodeException e) {
             // log body để dễ debug key / quota / model / policy
@@ -117,6 +130,60 @@ public class FoodAiService {
             return Optional.empty();
         } catch (Exception e) {
             log.warn("FoodAiService analyze failed: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Optional<FoodAiResult> analyzeWithGemini(byte[] imageBytes, String mimeType) {
+        String apiKey = getConfig("ai_google_api_key").orElse(googleApiKeyFromProps);
+        if (apiKey == null || apiKey.isBlank()) {
+            // Match Google doc behavior: also accept env vars
+            String envGoogle = System.getenv("GOOGLE_API_KEY");
+            String envLegacy = System.getenv("GEMINI_API_KEY");
+            apiKey = (envGoogle != null && !envGoogle.isBlank()) ? envGoogle : envLegacy;
+        }
+        if (apiKey == null || apiKey.isBlank()) return Optional.empty();
+
+        String prompt = getConfig("ai_food_prompt_template").orElse(
+                "Bạn là chuyên gia dinh dưỡng. Hãy đọc ảnh bữa ăn và trả về JSON liệt kê các món ăn/đồ uống nhìn thấy.\n" +
+                        "Yêu cầu:\n" +
+                        "- Chỉ trả về JSON thuần, không markdown.\n" +
+                        "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
+                        "- note: 1 câu ngắn mô tả tổng quan.\n"
+        );
+
+        String model = getConfig("ai_google_model").orElse(googleModel).trim();
+        if (model.isBlank()) model = "gemini-2.5-flash";
+
+        String mt = (mimeType == null || mimeType.isBlank()) ? "image/jpeg" : mimeType;
+
+        try {
+            Client client = Client.builder().apiKey(apiKey.trim()).build();
+            Content content = Content.fromParts(
+                    Part.fromText(prompt),
+                    Part.fromBytes(imageBytes, mt)
+            );
+
+            GenerateContentResponse response = client.models.generateContent(model, content, null);
+            String text = response != null ? response.text() : null;
+            if (text == null || text.isBlank()) {
+                try {
+                    String finishReason = response != null ? String.valueOf(response.finishReason()) : "null";
+                    Object promptFeedback = response != null ? response.promptFeedback().orElse(null) : null;
+                    String raw = response != null ? response.toJson() : null;
+                    if (raw != null && raw.length() > 4000) raw = raw.substring(0, 4000) + "...(truncated)";
+                    log.warn("FoodAiService(GeminiSDK) empty text. model={} finishReason={} promptFeedback={} raw={}",
+                            model, finishReason, promptFeedback, raw);
+                } catch (Exception ignored) {}
+                return Optional.empty();
+            }
+
+            return Optional.of(FoodAiResult.builder()
+                    .foodItemsJson(text.trim())
+                    .note(null)
+                    .build());
+        } catch (Exception e) {
+            log.warn("FoodAiService(GeminiSDK) analyze failed: {}", e.getMessage());
             return Optional.empty();
         }
     }

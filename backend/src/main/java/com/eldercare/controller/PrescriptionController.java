@@ -1,6 +1,9 @@
 package com.eldercare.controller;
 
 import com.eldercare.dto.ApiResponse;
+import com.eldercare.dto.MedicationDto;
+import com.eldercare.dto.MedicationScheduleDto;
+import com.eldercare.dto.PrescriptionDto;
 import com.eldercare.model.Medication;
 import com.eldercare.model.MedicationSchedule;
 import com.eldercare.model.Prescription;
@@ -21,31 +24,31 @@ public class PrescriptionController {
     private final PrescriptionService prescriptionService;
 
     @GetMapping("/elderly/{elderlyId}")
-    public ResponseEntity<ApiResponse<List<Prescription>>> getByElderly(@PathVariable Long elderlyId) {
+    public ResponseEntity<ApiResponse<List<PrescriptionDto>>> getByElderly(@PathVariable Long elderlyId) {
         List<Prescription> list = prescriptionService.findByElderlyId(elderlyId);
-        return ResponseEntity.ok(ApiResponse.success(list));
+        return ResponseEntity.ok(ApiResponse.success(list.stream().map(PrescriptionDto::fromEntity).toList()));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Prescription>> getById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<PrescriptionDto>> getById(@PathVariable Long id) {
         Prescription p = prescriptionService.findById(id);
-        return ResponseEntity.ok(ApiResponse.success(p));
+        return ResponseEntity.ok(ApiResponse.success(PrescriptionDto.fromEntity(p)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Prescription>> create(@RequestBody Prescription prescription,
-                                                            @RequestParam Long createdBy) {
+    public ResponseEntity<ApiResponse<PrescriptionDto>> create(@RequestBody Prescription prescription,
+                                                               @RequestParam Long createdBy) {
         Prescription saved = prescriptionService.create(prescription, createdBy);
-        return ResponseEntity.ok(ApiResponse.success(saved));
+        return ResponseEntity.ok(ApiResponse.success(PrescriptionDto.fromEntity(saved)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Prescription>> update(@PathVariable Long id, @RequestBody Prescription body) {
+    public ResponseEntity<ApiResponse<PrescriptionDto>> update(@PathVariable Long id, @RequestBody Prescription body) {
         Prescription existing = prescriptionService.findById(id);
         body.setId(existing.getId());
         body.setElderly(existing.getElderly());
         Prescription saved = prescriptionService.update(body);
-        return ResponseEntity.ok(ApiResponse.success(saved));
+        return ResponseEntity.ok(ApiResponse.success(PrescriptionDto.fromEntity(saved)));
     }
 
     @DeleteMapping("/{id}")
@@ -55,30 +58,30 @@ public class PrescriptionController {
     }
 
     @PostMapping("/{prescriptionId}/medications")
-    public ResponseEntity<ApiResponse<Medication>> addMedication(@PathVariable Long prescriptionId,
-                                                                 @RequestBody Medication medication) {
+    public ResponseEntity<ApiResponse<MedicationDto>> addMedication(@PathVariable Long prescriptionId,
+                                                                    @RequestBody Medication medication) {
         Medication saved = prescriptionService.addMedication(prescriptionId, medication);
-        return ResponseEntity.ok(ApiResponse.success(saved));
+        return ResponseEntity.ok(ApiResponse.success(MedicationDto.fromEntity(saved)));
     }
 
     @PostMapping("/medications/{medicationId}/schedules")
-    public ResponseEntity<ApiResponse<MedicationSchedule>> addSchedule(@PathVariable Long medicationId,
-                                                                       @RequestBody Map<String, Object> body) {
+    public ResponseEntity<ApiResponse<MedicationScheduleDto>> addSchedule(@PathVariable Long medicationId,
+                                                                          @RequestBody Map<String, Object> body) {
         String timeStr = (String) body.get("timeOfDay"); // "08:00"
         Integer reminder = body.get("reminderMinutesBefore") != null
                 ? (Integer) body.get("reminderMinutesBefore") : 15;
         LocalTime time = LocalTime.parse(timeStr != null ? timeStr : "08:00");
         MedicationSchedule schedule = prescriptionService.addSchedule(medicationId, time, reminder);
-        return ResponseEntity.ok(ApiResponse.success(schedule));
+        return ResponseEntity.ok(ApiResponse.success(MedicationScheduleDto.fromEntity(schedule)));
     }
 
     @PutMapping("/medications/{medicationId}")
-    public ResponseEntity<ApiResponse<Medication>> updateMedication(
+    public ResponseEntity<ApiResponse<MedicationDto>> updateMedication(
             @PathVariable Long medicationId,
             @RequestBody Medication body
     ) {
         Medication saved = prescriptionService.updateMedication(medicationId, body);
-        return ResponseEntity.ok(ApiResponse.success(saved));
+        return ResponseEntity.ok(ApiResponse.success(MedicationDto.fromEntity(saved)));
     }
 
     @DeleteMapping("/medications/{medicationId}")
@@ -88,7 +91,7 @@ public class PrescriptionController {
     }
 
     @PutMapping("/schedules/{scheduleId}")
-    public ResponseEntity<ApiResponse<MedicationSchedule>> updateSchedule(
+    public ResponseEntity<ApiResponse<MedicationScheduleDto>> updateSchedule(
             @PathVariable Long scheduleId,
             @RequestBody Map<String, Object> body
     ) {
@@ -98,7 +101,7 @@ public class PrescriptionController {
         Boolean isActive = body.get("isActive") != null ? Boolean.valueOf(body.get("isActive").toString()) : null;
         LocalTime time = timeStr != null ? LocalTime.parse(timeStr) : null;
         MedicationSchedule saved = prescriptionService.updateSchedule(scheduleId, time, reminder, isActive);
-        return ResponseEntity.ok(ApiResponse.success(saved));
+        return ResponseEntity.ok(ApiResponse.success(MedicationScheduleDto.fromEntity(saved)));
     }
 
     @DeleteMapping("/schedules/{scheduleId}")

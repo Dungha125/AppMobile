@@ -17,6 +17,8 @@ import { Client } from '@stomp/stompjs';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../utils/showAlert';
 import { getMessages, sendImage, sendText, WS_URL } from '../api/chat';
+import { API_URL } from '../api/client';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 function safeParseFoods(json) {
   try {
@@ -26,7 +28,14 @@ function safeParseFoods(json) {
     const note = obj?.note;
     return { names, note };
   } catch {
-    return null;
+    // Fallback: backend/LLM may return plain text or fenced JSON; show something instead of nothing.
+    const raw = (json || '').trim();
+    if (!raw) return null;
+    const unfenced = raw
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```$/i, '')
+      .trim();
+    return { names: [], note: unfenced };
   }
 }
 
@@ -40,28 +49,52 @@ export default function ChatScreen({ route, navigation }) {
   const [input, setInput] = useState('');
   const flatRef = useRef(null);
   const clientRef = useRef(null);
+  const lastSnapshotRef = useRef(null);
+
+  const isElderly = user?.role === 'ELDERLY';
+  const baseFontSize = isElderly ? 17 : 15;
+  const baseLineHeight = isElderly ? 26 : 22;
+  const aiFontSize = isElderly ? 15 : 12;
+  const aiLineHeight = isElderly ? 22 : 18;
 
   useEffect(() => {
     navigation.setOptions({ title: title || 'Chat' });
   }, [title, navigation]);
 
-  const load = async () => {
+  const snapshotKey = (items) => {
+    if (!Array.isArray(items) || items.length === 0) return 'empty';
+    const last = items[items.length - 1];
+    return `${items.length}-${last?.id || ''}-${last?.createdAt || ''}-${last?.text || ''}-${last?.imageUrl || ''}-${last?.aiNote || ''}`;
+  };
+
+  const load = async ({ silent } = {}) => {
     if (!conversationId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const res = await getMessages(conversationId, 50);
-      setList(res.data?.data || []);
+      const items = res.data?.data || [];
+      const key = snapshotKey(items);
+      if (silent && lastSnapshotRef.current === key) return;
+      lastSnapshotRef.current = key;
+      setList(items);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được tin nhắn', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được tin nhắn', type: 'error' });
+      }
     } finally {
-      setLoading(false);
-      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 0);
+      if (!silent) {
+        setLoading(false);
+        setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 0);
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, [conversationId]);
+
+  // fallback polling: if WS drops, messages still update
+  useSilentPolling(load, [conversationId], 3000, false);
 
   useEffect(() => {
     let active = true;
@@ -113,21 +146,84 @@ export default function ChatScreen({ route, navigation }) {
     };
   }, [conversationId]);
 
+  const resolveImageUrl = (url) => {
+    if (!url) return null;
+    if (/^https?:\/\//i.test(url)) return url;
+    const base = (API_URL || '').replace(/\/api\/?$/, '');
+    return base ? `${base}${url.startsWith('/') ? '' : '/'}${url}` : url;
+  };
+
+  const renderFormattedAi = (text) => {
+    if (!text) return null;
+    const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+    return (
+      <View style={styles.aiBlock}>
+        {lines.map((raw, idx) => {
+          const line = raw.trimEnd();
+          if (!line.trim()) return <View key={idx} style={{ height: 6 }} />;
+
+          const isH3 = /^\s*###\s+/.test(line);
+          const isH2 = /^\s*##\s+/.test(line);
+          const isBullet = /^\s*[-*]\s+/.test(line);
+
+          const clean = line
+            .replace(/^\s*###\s+/, '')
+            .replace(/^\s*##\s+/, '')
+            .replace(/^\s*[-*]\s+/, '• ')
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .trim();
+
+          return (
+            <Text
+              key={idx}
+              style={[
+                styles.aiNote,
+                {
+                  fontSize: aiFontSize,
+                  lineHeight: aiLineHeight,
+                },
+                (isH2 || isH3) && styles.aiHeading,
+                isH2 && { fontSize: aiFontSize + 2, lineHeight: aiLineHeight + 2 },
+                isH3 && { fontSize: aiFontSize + 1, lineHeight: aiLineHeight + 1 },
+                isBullet && styles.aiBullet,
+              ]}
+            >
+              {clean}
+            </Text>
+          );
+        })}
+      </View>
+    );
+  };
+
   const renderItem = ({ item }) => {
     const isMe = item.senderId === user?.id;
     const parsed = item.aiFoodItemsJson ? safeParseFoods(item.aiFoodItemsJson) : null;
     const foodLine = parsed?.names?.length ? `Món ăn: ${parsed.names.join(', ')}` : null;
     const noteLine = parsed?.note || item.aiNote;
+    const imageUri = item.imageUrl ? resolveImageUrl(item.imageUrl) : null;
 
     return (
       <View style={[styles.row, isMe ? styles.rowMe : styles.rowOther]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.image}
+              onError={(e) => console.warn('Chat image load failed', imageUri, e?.nativeEvent?.error)}
+            />
           ) : null}
-          {item.text ? <Text style={[styles.text, isMe ? styles.textMe : styles.textOther]}>{item.text}</Text> : null}
-          {foodLine ? <Text style={styles.ai}>{foodLine}</Text> : null}
-          {noteLine ? <Text style={styles.aiNote}>{noteLine}</Text> : null}
+          {item.text ? (
+            <Text style={[styles.text, { fontSize: baseFontSize, lineHeight: baseLineHeight }, isMe ? styles.textMe : styles.textOther]}>
+              {item.text}
+            </Text>
+          ) : null}
+          {foodLine ? (
+            <Text style={[styles.ai, { fontSize: aiFontSize + 1, lineHeight: aiLineHeight }]}>
+              {foodLine}
+            </Text>
+          ) : null}
+          {noteLine ? renderFormattedAi(noteLine) : null}
           {item.createdAt ? (
             <Text style={styles.time}>{new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</Text>
           ) : null}
@@ -226,7 +322,7 @@ export default function ChatScreen({ route, navigation }) {
           <Text style={styles.camText}>📷</Text>
         </TouchableOpacity>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { fontSize: baseFontSize, lineHeight: baseLineHeight }]}
           value={input}
           onChangeText={setInput}
           placeholder="Nhắn tin..."
@@ -257,13 +353,16 @@ const styles = StyleSheet.create({
   textOther: { color: '#1f2937' },
   time: { fontSize: 10, color: '#9ca3af', marginTop: 6, textAlign: 'right' },
   image: { width: 220, height: 220, borderRadius: 12, marginBottom: 8, backgroundColor: '#e5e7eb' },
-  ai: { marginTop: 6, fontSize: 12, color: '#111827', fontWeight: '700' },
-  aiNote: { marginTop: 4, fontSize: 12, color: '#374151' },
+  ai: { marginTop: 8, color: '#111827', fontWeight: '800' },
+  aiBlock: { marginTop: 6 },
+  aiHeading: { fontWeight: '800', color: '#111827', marginTop: 6 },
+  aiBullet: { paddingLeft: 8 },
+  aiNote: { marginTop: 2, color: '#111827' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, paddingBottom: 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb', gap: 8 },
   camBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
   camText: { fontSize: 18 },
-  input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, backgroundColor: '#f9fafb' },
+  input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 120, backgroundColor: '#f9fafb' },
   sendBtn: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#0f766e', borderRadius: 18, minHeight: 44, justifyContent: 'center' },
   sendText: { color: '#fff', fontWeight: '700' },
   btnDisabled: { opacity: 0.5 },

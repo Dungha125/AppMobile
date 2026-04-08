@@ -12,6 +12,7 @@ import {
 import { deleteMedication, deleteSchedule, getById, remove, update } from '../api/prescriptions';
 import { useAlert } from '../utils/showAlert';
 import { useAuth } from '../context/AuthContext';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -25,13 +26,13 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [prescription, setPrescription] = useState(null);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     if (!id) return;
     try {
       const res = await getById(id);
       setPrescription(res.data?.data || null);
     } catch (e) {
-      console.warn(e);
+      if (!silent) console.warn(e);
       setPrescription(null);
     } finally {
       setLoading(false);
@@ -41,6 +42,8 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
   useEffect(() => {
     load();
   }, [id]);
+
+  useSilentPolling(load, [id], 3000, false);
 
   if (loading) {
     return (

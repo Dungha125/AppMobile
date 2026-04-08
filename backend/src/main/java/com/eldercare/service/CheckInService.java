@@ -5,9 +5,12 @@ import com.eldercare.model.User;
 import com.eldercare.model.enums.CheckInType;
 import com.eldercare.repository.CheckInRepository;
 import com.eldercare.repository.ElderlyProfileRepository;
+import com.eldercare.repository.ElderlyCaregiverRepository;
 import com.eldercare.repository.UserRepository;
+import com.eldercare.dto.CheckInDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,6 +26,8 @@ public class CheckInService {
     private final CheckInRepository checkInRepository;
     private final UserRepository userRepository;
     private final ElderlyProfileRepository elderlyProfileRepository;
+    private final ElderlyCaregiverRepository elderlyCaregiverRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public CheckIn createCheckIn(Long elderlyId, CheckInType type, String notes, BigDecimal lat, BigDecimal lng) {
         User elderly = userRepository.findById(elderlyId)
@@ -54,6 +59,15 @@ public class CheckInService {
             }
             elderlyProfileRepository.save(profile);
         });
+
+        // realtime sync: notify elderly & caregivers
+        try {
+            CheckInDto dto = CheckInDto.fromEntity(checkIn);
+            messagingTemplate.convertAndSend("/topic/checkins/" + elderlyId, dto);
+            elderlyCaregiverRepository.findByElderly(elderly).forEach(link ->
+                    messagingTemplate.convertAndSend("/topic/checkins/" + link.getCaregiver().getId(), dto)
+            );
+        } catch (Exception ignored) {}
 
         return checkIn;
     }

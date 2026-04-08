@@ -11,6 +11,7 @@ import {
 import { useAlert } from '../utils/showAlert';
 import { createHealthEntry, deleteHealthEntry, getHealthEntries } from '../api/health';
 import { useAuth } from '../context/AuthContext';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 function fmt(dt) {
   if (!dt) return '';
@@ -24,13 +25,15 @@ export default function HealthTimelineScreen({ route, navigation }) {
   const [list, setList] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     if (!elderlyId) return;
     try {
       const res = await getHealthEntries(elderlyId, null, null, 200);
       setList(res.data?.data || []);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được hồ sơ sức khoẻ', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được hồ sơ sức khoẻ', type: 'error' });
+      }
     }
   };
 
@@ -38,6 +41,8 @@ export default function HealthTimelineScreen({ route, navigation }) {
     navigation.setOptions({ title: elderlyName ? `Sức khoẻ: ${elderlyName}` : 'Hồ sơ sức khoẻ' });
     load();
   }, [elderlyId]);
+
+  useSilentPolling(load, [elderlyId], 3000, false);
 
   const onRefresh = async () => {
     setRefreshing(true);

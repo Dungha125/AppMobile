@@ -18,7 +18,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -195,9 +194,8 @@ public class ChatService {
             String name = UUID.randomUUID() + ext;
             Path target = Paths.get("uploads").resolve(name);
             Files.write(target, file.getBytes());
-
-            String base = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
-            return base + "/uploads/" + name;
+            // Return relative URL so mobile clients can prefix correct host (10.0.2.2 vs LAN IP, etc.)
+            return "/uploads/" + name;
         } catch (Exception e) {
             throw new RuntimeException("Không lưu được ảnh");
         }

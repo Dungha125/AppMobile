@@ -16,6 +16,10 @@ import { getByElderly } from '../api/prescriptions';
 import { getByElderly as getCheckIns } from '../api/checkIns';
 import { getByElderly as getMedHistory, confirmTaken } from '../api/medicationHistory';
 import { getByCaregiver } from '../api/alerts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Client } from '@stomp/stompjs';
+import { WS_URL } from '../api/chat';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 const DAY_ABBREV = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -80,7 +84,7 @@ export default function ElderlyDetailScreen({ route, navigation }) {
   const [optimisticTaken, setOptimisticTaken] = useState(new Set());
   const { showAlert } = useAlert();
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     if (!elderlyId || !user?.id) return;
     try {
       const today = new Date();
@@ -97,11 +101,11 @@ export default function ElderlyDetailScreen({ route, navigation }) {
       setPrescriptions(presRes.data?.data || []);
       setCheckIns(checkRes.data?.data || []);
       const allAlerts = alertsRes.data?.data || [];
-      setAlerts(allAlerts.filter((a) => a.elderly?.id === elderlyId));
+      setAlerts(allAlerts.filter((a) => String(a.elderlyId) === String(elderlyId)));
       setMedHistory(histRes.data?.data || []);
       setOptimisticTaken(new Set());
     } catch (e) {
-      console.warn(e);
+      if (!silent) console.warn(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -111,6 +115,107 @@ export default function ElderlyDetailScreen({ route, navigation }) {
   useEffect(() => {
     load();
   }, [elderlyId, user?.id]);
+
+  // fallback polling: keeps UI fresh if WS drops
+  useSilentPolling(load, [elderlyId, user?.id], 3000, false);
+
+  // realtime check-in sync for this elderly (no reload)
+  useEffect(() => {
+    let active = true;
+    const connect = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token || !elderlyId) return;
+        const client = new Client({
+          reconnectDelay: 2000,
+          webSocketFactory: () =>
+            new WebSocket(WS_URL, undefined, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          onConnect: () => {
+            if (!active) return;
+            client.subscribe(`/topic/checkins/${elderlyId}`, (msg) => {
+              try {
+                const body = JSON.parse(msg.body);
+                setCheckIns((prev) => {
+                  const idx = prev.findIndex((c) => c.id === body.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = body;
+                    return next;
+                  }
+                  return [body, ...(prev || [])];
+                });
+              } catch {}
+            });
+          },
+        });
+        client.activate();
+        return client;
+      } catch {
+        return null;
+      }
+    };
+
+    let stomp = null;
+    connect().then((c) => { stomp = c; });
+    return () => {
+      active = false;
+      try { stomp?.deactivate(); } catch {}
+    };
+  }, [elderlyId]);
+
+  // realtime medication history sync for this elderly (no reload)
+  useEffect(() => {
+    let active = true;
+    const connect = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token || !elderlyId) return;
+        const client = new Client({
+          reconnectDelay: 2000,
+          webSocketFactory: () =>
+            new WebSocket(WS_URL, undefined, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          onConnect: () => {
+            if (!active) return;
+            client.subscribe(`/topic/med-history/${elderlyId}`, (msg) => {
+              try {
+                const body = JSON.parse(msg.body);
+                setMedHistory((prev) => {
+                  const sid = body.medicationScheduleId;
+                  const st = body.scheduledTime;
+                  if (!sid || !st) return prev;
+                  const idx = (prev || []).findIndex((h) =>
+                    String(h.medicationScheduleId || h.medicationSchedule?.id) === String(sid) &&
+                    String(h.scheduledTime) === String(st)
+                  );
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = body;
+                    return next;
+                  }
+                  return [body, ...(prev || [])];
+                });
+              } catch {}
+            });
+          },
+        });
+        client.activate();
+        return client;
+      } catch {
+        return null;
+      }
+    };
+
+    let stomp = null;
+    connect().then((c) => { stomp = c; });
+    return () => {
+      active = false;
+      try { stomp?.deactivate(); } catch {}
+    };
+  }, [elderlyId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -136,7 +241,7 @@ export default function ElderlyDetailScreen({ route, navigation }) {
     const set = new Set();
     const norm = (s) => (s || '').replace(/\.\d+Z?$/, '').substring(0, 16);
     (medHistory || []).forEach((h) => {
-      const sid = h.medicationSchedule?.id;
+      const sid = h.medicationScheduleId || h.medicationSchedule?.id;
       if (sid && h.scheduledTime) set.add(`${sid}-${norm(h.scheduledTime)}`);
     });
     return set;

@@ -6,8 +6,10 @@ import com.eldercare.model.enums.AlertType;
 import com.eldercare.repository.AlertRepository;
 import com.eldercare.repository.ElderlyCaregiverRepository;
 import com.eldercare.repository.UserRepository;
+import com.eldercare.dto.AlertDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,6 +25,7 @@ public class AlertService {
     private final UserRepository userRepository;
     private final ElderlyCaregiverRepository elderlyCaregiverRepository;
     private final PushService pushService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public Alert createAlert(Long elderlyId, AlertType type, String title, String message, BigDecimal lat, BigDecimal lng) {
         User elderly = userRepository.findById(elderlyId)
@@ -45,6 +48,11 @@ public class AlertService {
                     .build();
             alert = alertRepository.save(alert);
             if (firstAlert == null) firstAlert = alert;
+
+            // realtime sync for caregiver
+            try {
+                messagingTemplate.convertAndSend("/topic/alerts/" + caregiver.getId(), AlertDto.fromEntity(alert));
+            } catch (Exception ignored) {}
         }
 
         if (type == AlertType.SOS && !caregivers.isEmpty()) {

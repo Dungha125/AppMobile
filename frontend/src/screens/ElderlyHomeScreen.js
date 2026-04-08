@@ -17,6 +17,10 @@ import { getByElderly as getMedHistory } from '../api/medicationHistory';
 import { confirmTaken, skip } from '../api/medicationHistory';
 import { sendSos } from '../api/alerts';
 import { create } from '../api/checkIns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Client } from '@stomp/stompjs';
+import { WS_URL } from '../api/chat';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 const DAY_ABBREV = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -86,6 +90,76 @@ export default function ElderlyHomeScreen({ navigation }) {
 
   useEffect(() => {
     load();
+  }, [user?.id]);
+
+  // fallback polling: keeps UI fresh if WS drops
+  useSilentPolling(load, [user?.id], 3000, false);
+
+  // realtime sync for check-ins + medication history (no pull-to-refresh)
+  useEffect(() => {
+    let active = true;
+    const connect = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token || !user?.id) return;
+        const client = new Client({
+          reconnectDelay: 2000,
+          webSocketFactory: () =>
+            new WebSocket(WS_URL, undefined, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          onConnect: () => {
+            if (!active) return;
+            client.subscribe(`/topic/checkins/${user.id}`, (msg) => {
+              try {
+                const body = JSON.parse(msg.body);
+                setCheckIns((prev) => {
+                  const idx = prev.findIndex((c) => c.id === body.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = body;
+                    return next;
+                  }
+                  return [body, ...(prev || [])];
+                });
+              } catch {}
+            });
+            client.subscribe(`/topic/med-history/${user.id}`, (msg) => {
+              try {
+                const body = JSON.parse(msg.body);
+                setMedHistory((prev) => {
+                  // replace if same scheduleId + scheduledTime, else prepend
+                  const sid = body.medicationScheduleId;
+                  const st = body.scheduledTime;
+                  if (!sid || !st) return prev;
+                  const idx = (prev || []).findIndex((h) =>
+                    String(h.medicationScheduleId || h.medicationSchedule?.id) === String(sid) &&
+                    String(h.scheduledTime) === String(st)
+                  );
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = body;
+                    return next;
+                  }
+                  return [body, ...(prev || [])];
+                });
+              } catch {}
+            });
+          },
+        });
+        client.activate();
+        return client;
+      } catch {
+        return null;
+      }
+    };
+
+    let stomp = null;
+    connect().then((c) => { stomp = c; });
+    return () => {
+      active = false;
+      try { stomp?.deactivate(); } catch {}
+    };
   }, [user?.id]);
 
   const takenKeys = useMemo(() => {

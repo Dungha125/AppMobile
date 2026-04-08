@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
 import { useAlert } from '../utils/showAlert';
 import { listMyDevices, revokeMyDevice } from '../api/devices';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 function fmt(dt) {
   if (!dt) return '—';
@@ -13,18 +14,22 @@ export default function DevicesScreen() {
   const [list, setList] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await listMyDevices();
       setList(res.data?.data || []);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được thiết bị', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được thiết bị', type: 'error' });
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useSilentPolling(load, [], 3000, false);
 
   const onRefresh = async () => {
     setRefreshing(true);

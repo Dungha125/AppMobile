@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } 
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../utils/showAlert';
 import { getConversations } from '../api/chat';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 export default function ChatListScreen({ navigation }) {
   const { user } = useAuth();
@@ -10,18 +11,22 @@ export default function ChatListScreen({ navigation }) {
   const [list, setList] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await getConversations();
       setList(res.data?.data || []);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được danh sách chat', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được danh sách chat', type: 'error' });
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useSilentPolling(load, [], 3000, false);
 
   const onRefresh = async () => {
     setRefreshing(true);

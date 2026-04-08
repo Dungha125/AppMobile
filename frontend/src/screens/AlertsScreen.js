@@ -10,24 +10,76 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getByCaregiver, markAsRead } from '../api/alerts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Client } from '@stomp/stompjs';
+import { WS_URL } from '../api/chat';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 export default function AlertsScreen() {
   const { user } = useAuth();
   const [list, setList] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     if (!user?.id) return;
     try {
       const res = await getByCaregiver(user.id);
       setList(res.data?.data || []);
     } catch (e) {
-      console.warn(e);
+      if (!silent) console.warn(e);
     }
   };
 
   useEffect(() => {
     load();
+  }, [user?.id]);
+
+  useSilentPolling(load, [user?.id], 3000, false);
+
+  // realtime alerts sync (no reload)
+  useEffect(() => {
+    let active = true;
+    const connect = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token || !user?.id) return;
+        const client = new Client({
+          reconnectDelay: 2000,
+          webSocketFactory: () =>
+            new WebSocket(WS_URL, undefined, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          onConnect: () => {
+            if (!active) return;
+            client.subscribe(`/topic/alerts/${user.id}`, (msg) => {
+              try {
+                const body = JSON.parse(msg.body);
+                setList((prev) => {
+                  const idx = prev.findIndex((a) => a.id === body.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = body;
+                    return next;
+                  }
+                  return [body, ...(prev || [])];
+                });
+              } catch {}
+            });
+          },
+        });
+        client.activate();
+        return client;
+      } catch {
+        return null;
+      }
+    };
+
+    let stomp = null;
+    connect().then((c) => { stomp = c; });
+    return () => {
+      active = false;
+      try { stomp?.deactivate(); } catch {}
+    };
   }, [user?.id]);
 
   const handleMarkRead = async (item) => {
@@ -94,7 +146,7 @@ export default function AlertsScreen() {
                     style={styles.itemLocation}
                     onPress={(e) => { e.stopPropagation(); openLocation(item.latitude, item.longitude); }}
                   >
-                    <Text style={styles.itemLocationText}>📍 Vị trí NCT: {item.elderly?.fullName || '—'} — {locStr} (Bấm mở bản đồ)</Text>
+                    <Text style={styles.itemLocationText}>📍 Vị trí NCT: {locStr} (Bấm mở bản đồ)</Text>
                   </TouchableOpacity>
                 )}
                 <Text style={styles.itemTime}>

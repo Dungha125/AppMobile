@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useAlert } from '../utils/showAlert';
 import { getAdminConfig, setAdminConfig } from '../api/admin';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 const FRIENDLY_CONFIG = {
   checkin_inactive_minutes: 'Thời gian không điểm danh trước khi cảnh báo (phút)',
@@ -27,8 +28,10 @@ const FRIENDLY_CONFIG = {
   daily_checkin_alert_enabled: 'Bật cảnh báo không điểm danh hằng ngày (true/false)',
   daily_checkin_deadline_time: 'Hạn cuối điểm danh trong ngày (HH:mm)',
   daily_checkin_grace_minutes: 'Ân hạn sau hạn cuối (phút)',
-  ai_provider: 'AI provider (vd: openai)',
-  ai_api_key: 'AI API key (cẩn thận khi lưu)',
+  ai_provider: 'AI provider (vd: google | openai)',
+  ai_api_key: 'OpenAI API key (cẩn thận khi lưu)',
+  ai_google_api_key: 'Google AI Studio (Gemini) API key',
+  ai_google_model: 'Gemini model (vd: gemini-1.5-flash)',
   ai_food_prompt_template: 'AI prompt phân tích ảnh bữa ăn',
   chat_max_image_mb: 'Giới hạn ảnh chat (MB)',
 };
@@ -43,18 +46,31 @@ export default function AdminConfigScreen({ navigation }) {
   const [editDesc, setEditDesc] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await getAdminConfig();
       setList(res.data?.data || []);
     } catch (e) {
-      showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải cấu hình', type: 'error' });
+      if (!silent) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải cấu hình', type: 'error' });
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  // do not poll while editing modal to avoid overwriting form fields
+  useSilentPolling(
+    async (opts) => {
+      if (modalVisible) return;
+      return load(opts);
+    },
+    [modalVisible],
+    3000,
+    false
+  );
 
   useFocusEffect(
     React.useCallback(() => {

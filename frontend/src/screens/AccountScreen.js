@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getMe } from '../api/users';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 const ROLE_LABELS = { ELDERLY: 'Người cao tuổi', CAREGIVER: 'Người chăm sóc' };
 
@@ -17,7 +18,7 @@ export default function AccountScreen({ navigation }) {
   const [user, setUser] = useState(authUser);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await getMe();
       const u = res.data?.data;
@@ -26,13 +27,15 @@ export default function AccountScreen({ navigation }) {
         await refreshUser();
       }
     } catch (e) {
-      console.warn(e);
+      if (!silent) console.warn(e);
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useSilentPolling(load, [], 3000, false);
 
   const onRefresh = async () => {
     setRefreshing(true);

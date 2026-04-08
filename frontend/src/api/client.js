@@ -16,7 +16,7 @@ const API_URL = (CONFIG_API_URL && CONFIG_API_URL.startsWith('http'))
     ? 'http://localhost:8082/api'
     : Platform.OS === 'android'
       ? 'http://10.0.2.2:8082/api' // Android emulator (nếu chạy trên thiết bị thật, set EXPO_PUBLIC_API_URL)
-      : 'http://192.168.0.104:8082/api'; // iOS sim / fallback
+      : 'http://192.168.1.244:8082/api'; // iOS sim / fallback
 
 const api = axios.create({
   baseURL: API_URL,
@@ -30,6 +30,23 @@ api.interceptors.request.use(
     const token = await AsyncStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // If sending multipart/form-data (FormData), do NOT force application/json.
+    // Let axios/react-native set the correct Content-Type with boundary.
+    const data = config.data;
+    const isFormData =
+      (typeof FormData !== 'undefined' && data instanceof FormData) ||
+      (data && typeof data === 'object' && Array.isArray(data._parts)); // RN FormData shape
+    if (isFormData) {
+      try {
+        if (config.headers && 'Content-Type' in config.headers) {
+          delete config.headers['Content-Type'];
+        }
+        if (config.headers && 'content-type' in config.headers) {
+          delete config.headers['content-type'];
+        }
+      } catch (_) {}
     }
     return config;
   },

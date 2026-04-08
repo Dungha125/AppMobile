@@ -1,3 +1,4 @@
+E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\MedicationDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\UserService.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\repository\HealthEntryRepository.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\DeviceService.java
@@ -12,6 +13,7 @@ E:\DEV\appmobile\backend\src\main\java\com\eldercare\config\AdminSeeder.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\MedicationHistoryDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\controller\PrescriptionController.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\scheduler\DailyCheckinAlertScheduler.java
+E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\CheckInDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\exception\GlobalExceptionHandler.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\repository\MedicationRepository.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\PrescriptionService.java
@@ -20,6 +22,7 @@ E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\RegisterDeviceRequest.j
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\repository\MessageRepository.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\controller\ChatController.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\MedicationSchedule.java
+E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\MedicationScheduleDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\Conversation.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\ElderlyProfile.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\scheduler\MedicationReminderScheduler.java
@@ -32,6 +35,7 @@ E:\DEV\appmobile\backend\src\main\java\com\eldercare\repository\PrescriptionRepo
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\ChatService.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\enums\MedicationHistoryStatus.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\ChatMessageDto.java
+E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\PrescriptionDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\controller\DeviceController.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\ElderlyCaregiver.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\config\SecurityConfig.java
@@ -51,6 +55,7 @@ E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\DeviceToken.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\CheckInService.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\util\BcryptHashGenerator.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\service\AdminService.java
+E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\AlertDto.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\model\Alert.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\dto\ApiResponse.java
 E:\DEV\appmobile\backend\src\main\java\com\eldercare\controller\HealthController.java

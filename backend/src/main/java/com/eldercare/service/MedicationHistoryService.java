@@ -1,5 +1,6 @@
 package com.eldercare.service;
 
+import com.eldercare.dto.MedicationHistoryDto;
 import com.eldercare.model.MedicationHistory;
 import com.eldercare.model.MedicationSchedule;
 import com.eldercare.model.enums.MedicationHistoryStatus;
@@ -9,6 +10,7 @@ import com.eldercare.repository.MedicationScheduleRepository;
 import com.eldercare.repository.SystemConfigRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ public class MedicationHistoryService {
     private final ElderlyCaregiverRepository elderlyCaregiverRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final PushService pushService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public MedicationHistory confirmTaken(Long scheduleId, LocalDateTime scheduledTime) {
@@ -37,7 +40,11 @@ public class MedicationHistoryService {
                         .build());
         history.setTakenAt(LocalDateTime.now());
         history.setStatus(MedicationHistoryStatus.TAKEN);
-        return historyRepository.save(history);
+        MedicationHistory saved = historyRepository.save(history);
+
+        // realtime sync: notify elderly & caregivers
+        broadcast(saved);
+        return saved;
     }
 
     @Transactional
@@ -52,7 +59,11 @@ public class MedicationHistoryService {
         history.setTakenAt(LocalDateTime.now());
         history.setStatus(MedicationHistoryStatus.SKIPPED);
         history.setNotes(notes);
-        return historyRepository.save(history);
+        MedicationHistory saved = historyRepository.save(history);
+
+        // realtime sync: notify elderly & caregivers
+        broadcast(saved);
+        return saved;
     }
 
     @Transactional
@@ -114,5 +125,19 @@ public class MedicationHistoryService {
         if (elderlyId != null) list.add(elderlyId);
         if (caregiverIds != null) list.addAll(caregiverIds);
         return list;
+    }
+
+    private void broadcast(MedicationHistory h) {
+        try {
+            if (h == null || h.getMedicationSchedule() == null) return;
+            var p = h.getMedicationSchedule().getMedication().getPrescription();
+            if (p == null || p.getElderly() == null) return;
+            Long elderlyId = p.getElderly().getId();
+            MedicationHistoryDto dto = MedicationHistoryDto.fromEntity(h);
+            messagingTemplate.convertAndSend("/topic/med-history/" + elderlyId, dto);
+            elderlyCaregiverRepository.findByElderly(p.getElderly()).forEach(link ->
+                    messagingTemplate.convertAndSend("/topic/med-history/" + link.getCaregiver().getId(), dto)
+            );
+        } catch (Exception ignored) {}
     }
 }

@@ -9,24 +9,27 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getAdminStats } from '../api/admin';
+import { useSilentPolling } from '../utils/useSilentPolling';
 
 export default function AdminHomeScreen({ navigation }) {
   const { user, logout } = useAuth();
   const [stats, setStats] = useState({});
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
       const res = await getAdminStats();
       setStats(res.data?.data || {});
     } catch (e) {
-      console.warn(e);
+      if (!silent) console.warn(e);
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useSilentPolling(load, [], 3000, false);
 
   const onRefresh = async () => {
     setRefreshing(true);
