@@ -31,9 +31,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "apiUrl": "https://sylas-acetic-latently.ngrok-free.dev/api"
-    },
+    "extra": {},
     "plugins": [
       "@react-native-community/datetimepicker"
     ]
