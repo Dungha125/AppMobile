@@ -4,14 +4,11 @@ import com.google.genai.Client;
 import com.google.genai.types.Content;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Part;
-import com.eldercare.model.SystemConfig;
-import com.eldercare.repository.SystemConfigRepository;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -24,28 +21,28 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class FoodAiService {
 
-    private final SystemConfigRepository systemConfigRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    @Value("${ai.openai.apiKey:}")
-    private String openAiApiKeyFromProps;
-
-    @Value("${ai.openai.model:gpt-4o-mini}")
-    private String openAiModel;
-
-    @Value("${ai.google.apiKey:}")
-    private String googleApiKeyFromProps;
-
-    @Value("${ai.google.model:gemini-2.5-flash}")
-    private String googleModel;
+    // Hard-coded AI config for meal analysis (edit here directly when needed).
+    private static final String HARD_CODED_PROVIDER = "google"; // openai | google
+    private static final String HARD_CODED_OPENAI_API_KEY = "";
+    private static final String HARD_CODED_OPENAI_MODEL = "gpt-4o-mini";
+    private static final String HARD_CODED_GOOGLE_API_KEY = "AIzaSyCSvlCzs_ga7rckCwT3jor1fmdMNZz72ZY";
+    private static final String HARD_CODED_GOOGLE_MODEL = "gemini-3-flash-preview";
+    private static final String HARD_CODED_MEAL_PROMPT =
+            "Bạn là chuyên gia dinh dưỡng. Hãy đọc ảnh bữa ăn và trả về JSON liệt kê các món ăn/đồ uống nhìn thấy.\n" +
+            "Yêu cầu:\n" +
+            "- Chỉ trả về JSON thuần, không markdown.\n" +
+            "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
+            "- note: 1 câu ngắn mô tả tổng quan.\n";
 
     @Data
     @Builder
@@ -56,31 +53,25 @@ public class FoodAiService {
     }
 
     public Optional<FoodAiResult> analyzeMealImage(byte[] imageBytes, String mimeType) {
-        String provider = getConfig("ai_provider").orElse("openai").trim().toLowerCase();
+        String provider = HARD_CODED_PROVIDER.trim().toLowerCase();
         if (provider.equals("google") || provider.equals("gemini") || provider.equals("google_ai_studio")) {
             return analyzeWithGemini(imageBytes, mimeType);
         }
         if (!provider.equals("openai")) return Optional.empty();
 
-        String apiKey = getConfig("ai_api_key").orElse(openAiApiKeyFromProps);
+        String apiKey = HARD_CODED_OPENAI_API_KEY;
         if (apiKey == null || apiKey.isBlank()) {
             return Optional.empty();
         }
 
-        String prompt = getConfig("ai_food_prompt_template").orElse(
-                "Bạn là chuyên gia dinh dưỡng. Hãy đọc ảnh bữa ăn và trả về JSON liệt kê các món ăn/đồ uống nhìn thấy.\n" +
-                        "Yêu cầu:\n" +
-                        "- Chỉ trả về JSON thuần, không markdown.\n" +
-                        "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
-                        "- note: 1 câu ngắn mô tả tổng quan.\n"
-        );
+        String prompt = HARD_CODED_MEAL_PROMPT;
 
         String b64 = Base64.getEncoder().encodeToString(imageBytes);
         String dataUrl = "data:" + (mimeType == null || mimeType.isBlank() ? "image/jpeg" : mimeType) + ";base64," + b64;
 
         try {
             Map<String, Object> payload = Map.of(
-                    "model", openAiModel,
+                    "model", HARD_CODED_OPENAI_MODEL,
                     "messages", List.of(
                             Map.of(
                                     "role", "user",
@@ -135,24 +126,12 @@ public class FoodAiService {
     }
 
     private Optional<FoodAiResult> analyzeWithGemini(byte[] imageBytes, String mimeType) {
-        String apiKey = getConfig("ai_google_api_key").orElse(googleApiKeyFromProps);
-        if (apiKey == null || apiKey.isBlank()) {
-            // Match Google doc behavior: also accept env vars
-            String envGoogle = System.getenv("GOOGLE_API_KEY");
-            String envLegacy = System.getenv("GEMINI_API_KEY");
-            apiKey = (envGoogle != null && !envGoogle.isBlank()) ? envGoogle : envLegacy;
-        }
+        String apiKey = HARD_CODED_GOOGLE_API_KEY;
         if (apiKey == null || apiKey.isBlank()) return Optional.empty();
 
-        String prompt = getConfig("ai_food_prompt_template").orElse(
-                "Bạn là chuyên gia dinh dưỡng. Hãy đọc ảnh bữa ăn và trả về JSON liệt kê các món ăn/đồ uống nhìn thấy.\n" +
-                        "Yêu cầu:\n" +
-                        "- Chỉ trả về JSON thuần, không markdown.\n" +
-                        "- Format: {\"items\":[{\"name\":\"...\",\"confidence\":0.0}],\"note\":\"...\"}\n" +
-                        "- note: 1 câu ngắn mô tả tổng quan.\n"
-        );
+        String prompt = HARD_CODED_MEAL_PROMPT;
 
-        String model = getConfig("ai_google_model").orElse(googleModel).trim();
+        String model = HARD_CODED_GOOGLE_MODEL.trim();
         if (model.isBlank()) model = "gemini-2.5-flash";
 
         String mt = (mimeType == null || mimeType.isBlank()) ? "image/jpeg" : mimeType;
@@ -188,14 +167,5 @@ public class FoodAiService {
         }
     }
 
-    private Optional<String> getConfig(String key) {
-        try {
-            return systemConfigRepository.findByConfigKey(key)
-                    .map(SystemConfig::getConfigValue)
-                    .filter(v -> v != null && !v.isBlank());
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
 }
 

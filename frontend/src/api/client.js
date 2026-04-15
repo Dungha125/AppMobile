@@ -16,7 +16,7 @@ const API_URL = (CONFIG_API_URL && CONFIG_API_URL.startsWith('http'))
     ? 'http://localhost:8082/api'
     : Platform.OS === 'android'
       ? 'http://10.0.2.2:8082/api' // Android emulator (nếu chạy trên thiết bị thật, set EXPO_PUBLIC_API_URL)
-      : 'http://172.20.10.4:8082/api'; // iOS sim / fallback
+      : 'http://192.168.1.245:8082/api'; // iOS sim / fallback
 
 const api = axios.create({
   baseURL: API_URL,

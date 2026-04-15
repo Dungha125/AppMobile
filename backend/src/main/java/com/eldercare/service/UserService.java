@@ -68,6 +68,18 @@ public class UserService {
         elderlyCaregiverRepository.save(link);
     }
 
+    @Transactional
+    public void unlinkElderlyCaregiver(Long caregiverId, Long elderlyId) {
+        User caregiver = findById(caregiverId);
+        User elderly = findById(elderlyId);
+        if (caregiver.getRole() != UserRole.CAREGIVER || elderly.getRole() != UserRole.ELDERLY) {
+            throw new RuntimeException("Chỉ có thể hủy liên kết giữa người giám hộ và người cao tuổi");
+        }
+        ElderlyCaregiver link = elderlyCaregiverRepository.findByElderlyAndCaregiver(elderly, caregiver)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy liên kết"));
+        elderlyCaregiverRepository.delete(link);
+    }
+
     public ElderlyProfile getOrCreateElderlyProfile(Long userId) {
         User user = findById(userId);
         if (user.getRole() != UserRole.ELDERLY) {

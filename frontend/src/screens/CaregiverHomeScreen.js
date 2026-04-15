@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getLinkedElderly } from '../api/users';
+import { useAlert } from '../utils/showAlert';
+import { getLinkedElderly, unlinkElderly } from '../api/users';
 import { getByCaregiver, getUnreadCount } from '../api/alerts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Client } from '@stomp/stompjs';
@@ -19,6 +20,7 @@ import { useSilentPolling } from '../utils/useSilentPolling';
 
 export default function CaregiverHomeScreen({ navigation }) {
   const { user, logout } = useAuth();
+  const { showAlert } = useAlert();
   const [elderly, setElderly] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -122,6 +124,30 @@ export default function CaregiverHomeScreen({ navigation }) {
     }
   };
 
+  const handleUnlink = async (e) => {
+    const confirmed = await showAlert({
+      title: 'Hủy liên kết',
+      message: `Bạn có chắc muốn hủy liên kết với ${e.fullName || 'người cao tuổi này'}? Bạn sẽ không còn xem được dữ liệu chăm sóc của họ.`,
+      type: 'confirm',
+      showCancel: true,
+      confirmText: 'Hủy liên kết',
+      cancelText: 'Giữ liên kết',
+    });
+    if (!confirmed) return;
+    try {
+      await unlinkElderly(e.id);
+      showAlert({
+        title: 'Đã hủy liên kết',
+        message: 'Liên kết đã được gỡ bỏ.',
+        type: 'success',
+      });
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Không hủy được liên kết';
+      showAlert({ title: 'Lỗi', message: msg, type: 'error' });
+    }
+  };
+
   return (
     <ScrollView
       style={styles.container}
@@ -169,14 +195,23 @@ export default function CaregiverHomeScreen({ navigation }) {
           <Text style={styles.empty}>Chưa liên kết ai. Bấm Liên kết thêm để thêm.</Text>
         ) : (
           elderly.map((e) => (
-            <TouchableOpacity
-              key={e.id}
-              style={styles.elderlyItem}
-              onPress={() => navigation.navigate('ElderlyDetail', { elderlyId: e.id, elderlyName: e.fullName })}
-            >
-              <Text style={styles.elderlyName}>{e.fullName}</Text>
-              <Text style={styles.elderlyEmail}>{e.email}</Text>
-            </TouchableOpacity>
+            <View key={e.id} style={styles.elderlyRow}>
+              <TouchableOpacity
+                style={styles.elderlyItem}
+                onPress={() => navigation.navigate('ElderlyDetail', { elderlyId: e.id, elderlyName: e.fullName })}
+              >
+                <Text style={styles.elderlyName}>{e.fullName}</Text>
+                <Text style={styles.elderlyEmail}>{e.email}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.unlinkBtn}
+                onPress={() => handleUnlink(e)}
+                accessibilityRole="button"
+                accessibilityLabel="Hủy liên kết"
+              >
+                <Text style={styles.unlinkText}>Hủy liên kết</Text>
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </View>
@@ -265,12 +300,25 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
   link: { color: '#0f766e', fontSize: 14 },
   empty: { color: '#999' },
+  elderlyRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 8,
+    gap: 8,
+  },
   elderlyItem: {
+    flex: 1,
     padding: 12,
     backgroundColor: '#f9f9f9',
     borderRadius: 8,
-    marginBottom: 8,
   },
+  unlinkBtn: {
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignSelf: 'center',
+  },
+  unlinkText: { color: '#dc2626', fontSize: 13, fontWeight: '600' },
   elderlyName: { fontSize: 16, fontWeight: '600' },
   elderlyEmail: { fontSize: 12, color: '#666' },
   alertItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'flex-start' },

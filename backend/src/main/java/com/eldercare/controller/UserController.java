@@ -50,6 +50,21 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("Liên kết thành công", "OK"));
     }
 
+    @PostMapping("/unlink")
+    public ResponseEntity<ApiResponse<String>> unlinkElderlyCaregiver(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @RequestBody Map<String, Long> body) {
+        if (currentUser == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Chưa đăng nhập"));
+        }
+        Long elderlyId = body.get("elderlyId");
+        if (elderlyId == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Thiếu elderlyId"));
+        }
+        userService.unlinkElderlyCaregiver(currentUser.getUserId(), elderlyId);
+        return ResponseEntity.ok(ApiResponse.success("Đã hủy liên kết", "OK"));
+    }
+
     @PostMapping("/link-by-email")
     public ResponseEntity<ApiResponse<String>> linkByEmail(
             @AuthenticationPrincipal CurrentUser currentUser,
