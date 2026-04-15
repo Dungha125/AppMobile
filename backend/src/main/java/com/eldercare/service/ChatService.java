@@ -167,7 +167,7 @@ public class ChatService {
             if (msg == null) return;
             if (resultOpt.isEmpty()) {
                 // hiển thị rõ lỗi cấu hình / gọi AI cho client thay vì im lặng
-                msg.setAiNote("AI chưa cấu hình hoặc không gọi được. Kiểm tra `ai_api_key` / quyền mạng / quota.");
+                msg.setAiNote("AI chưa cấu hình hoặc không gọi được. Kiểm tra `ai_provider`, `ai_google_api_key`, `ai_google_model` (hoặc OpenAI key/model), quyền mạng và quota.");
                 messageRepository.save(msg);
                 messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, toDto(msg));
                 return;

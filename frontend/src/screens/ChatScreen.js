@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Keyboard,
+  InteractionManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,9 +25,13 @@ import { useSilentPolling } from '../utils/useSilentPolling';
 function safeParseFoods(json) {
   try {
     const obj = JSON.parse(json);
-    const items = obj?.items || [];
-    const names = items.map((it) => it?.name).filter(Boolean);
-    const note = obj?.note;
+    const items = Array.isArray(obj)
+      ? obj
+      : (obj?.items || obj?.foods || obj?.foodItems || []);
+    const names = (Array.isArray(items) ? items : [])
+      .map((it) => (typeof it === 'string' ? it : it?.name || it?.food || it?.label))
+      .filter(Boolean);
+    const note = obj?.note || obj?.summary || obj?.description || null;
     return { names, note };
   } catch {
     // Fallback: backend/LLM may return plain text or fenced JSON; show something instead of nothing.
@@ -50,6 +56,8 @@ export default function ChatScreen({ route, navigation }) {
   const flatRef = useRef(null);
   const clientRef = useRef(null);
   const lastSnapshotRef = useRef(null);
+  const bottomSyncTimerRef = useRef(null);
+  const lastBottomSyncRef = useRef('');
 
   const isElderly = user?.role === 'ELDERLY';
   const baseFontSize = isElderly ? 17 : 15;
@@ -66,6 +74,28 @@ export default function ChatScreen({ route, navigation }) {
     const last = items[items.length - 1];
     return `${items.length}-${last?.id || ''}-${last?.createdAt || ''}-${last?.text || ''}-${last?.imageUrl || ''}-${last?.aiNote || ''}`;
   };
+
+  const scheduleBottomSync = (delay = 60) => {
+    if (bottomSyncTimerRef.current) {
+      clearTimeout(bottomSyncTimerRef.current);
+      bottomSyncTimerRef.current = null;
+    }
+    bottomSyncTimerRef.current = setTimeout(() => {
+      // Wait until current interactions/layout updates finish to avoid drift.
+      InteractionManager.runAfterInteractions(() => {
+        flatRef.current?.scrollToEnd({ animated: false });
+      });
+    }, delay);
+  };
+
+  useEffect(() => {
+    if (!Array.isArray(list) || list.length === 0) return;
+    const last = list[list.length - 1];
+    const syncKey = `${list.length}-${last?.id || ''}-${last?.aiFoodItemsJson || ''}-${last?.aiNote || ''}`;
+    if (lastBottomSyncRef.current === syncKey) return;
+    lastBottomSyncRef.current = syncKey;
+    scheduleBottomSync(40);
+  }, [list]);
 
   const load = async ({ silent } = {}) => {
     if (!conversationId) return;
@@ -84,7 +114,7 @@ export default function ChatScreen({ route, navigation }) {
     } finally {
       if (!silent) {
         setLoading(false);
-        setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 0);
+        scheduleBottomSync(0);
       }
     }
   };
@@ -124,7 +154,7 @@ export default function ChatScreen({ route, navigation }) {
                   }
                   return [...prev, body];
                 });
-                setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 0);
+                scheduleBottomSync(20);
               } catch {}
             });
           },
@@ -145,6 +175,19 @@ export default function ChatScreen({ route, navigation }) {
       clientRef.current = null;
     };
   }, [conversationId]);
+
+  useEffect(() => {
+    const onShow = Keyboard.addListener('keyboardDidShow', () => scheduleBottomSync(50));
+    const onHide = Keyboard.addListener('keyboardDidHide', () => scheduleBottomSync(50));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+      if (bottomSyncTimerRef.current) {
+        clearTimeout(bottomSyncTimerRef.current);
+        bottomSyncTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const resolveImageUrl = (url) => {
     if (!url) return null;
@@ -243,7 +286,7 @@ export default function ChatScreen({ route, navigation }) {
       }
       return [...prev, msg];
     });
-    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 0);
+    scheduleBottomSync(10);
   };
 
   const canSend = input.trim().length > 0 && !sending;
@@ -315,7 +358,8 @@ export default function ChatScreen({ route, navigation }) {
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
-        onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => scheduleBottomSync(80)}
+        keyboardShouldPersistTaps="handled"
       />
       <View style={styles.inputRow}>
         <TouchableOpacity style={[styles.camBtn, sending && styles.btnDisabled]} onPress={pickImage} disabled={sending}>

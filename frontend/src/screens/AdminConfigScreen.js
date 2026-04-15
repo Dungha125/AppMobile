@@ -30,6 +30,7 @@ const FRIENDLY_CONFIG = {
   daily_checkin_grace_minutes: 'Ân hạn sau hạn cuối (phút)',
   ai_provider: 'AI provider (vd: google | openai)',
   ai_api_key: 'OpenAI API key (cẩn thận khi lưu)',
+  ai_openai_model: 'OpenAI model (vd: gpt-4o-mini)',
   ai_google_api_key: 'Google AI Studio (Gemini) API key',
   ai_google_model: 'Gemini model (vd: gemini-1.5-flash)',
   ai_food_prompt_template: 'AI prompt phân tích ảnh bữa ăn',
