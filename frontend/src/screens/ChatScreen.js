@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Client } from '@stomp/stompjs';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../utils/showAlert';
-import { getMessages, sendImage, sendText, WS_URL } from '../api/chat';
+import { getMessages, sendImage, sendText, analyzeMealMessage, WS_URL } from '../api/chat';
 import { API_URL } from '../api/client';
 import { useSilentPolling } from '../utils/useSilentPolling';
 
@@ -52,6 +52,8 @@ export default function ChatScreen({ route, navigation }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState(null);
+  const [mealAiUnlocked, setMealAiUnlocked] = useState(() => new Set());
   const [input, setInput] = useState('');
   const flatRef = useRef(null);
   const clientRef = useRef(null);
@@ -60,10 +62,10 @@ export default function ChatScreen({ route, navigation }) {
   const lastBottomSyncRef = useRef('');
 
   const isElderly = user?.role === 'ELDERLY';
-  const baseFontSize = isElderly ? 17 : 15;
-  const baseLineHeight = isElderly ? 26 : 22;
-  const aiFontSize = isElderly ? 15 : 12;
-  const aiLineHeight = isElderly ? 22 : 18;
+  const baseFontSize = isElderly ? 19 : 15;
+  const baseLineHeight = isElderly ? 30 : 22;
+  const aiFontSize = isElderly ? 17 : 12;
+  const aiLineHeight = isElderly ? 26 : 18;
 
   useEffect(() => {
     navigation.setOptions({ title: title || 'Chat' });
@@ -107,6 +109,15 @@ export default function ChatScreen({ route, navigation }) {
       if (silent && lastSnapshotRef.current === key) return;
       lastSnapshotRef.current = key;
       setList(items);
+      setMealAiUnlocked((prev) => {
+        const next = new Set(prev);
+        for (const m of items) {
+          if (m?.id != null && m?.aiFoodItemsJson != null && String(m.aiFoodItemsJson).trim() !== '') {
+            next.add(m.id);
+          }
+        }
+        return next;
+      });
     } catch (e) {
       if (!silent) {
         showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không tải được tin nhắn', type: 'error' });
@@ -120,6 +131,7 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   useEffect(() => {
+    setMealAiUnlocked(new Set());
     load();
   }, [conversationId]);
 
@@ -154,6 +166,13 @@ export default function ChatScreen({ route, navigation }) {
                   }
                   return [...prev, body];
                 });
+                if (body?.id != null && body?.aiFoodItemsJson != null && String(body.aiFoodItemsJson).trim() !== '') {
+                  setMealAiUnlocked((prev) => {
+                    const next = new Set(prev);
+                    next.add(body.id);
+                    return next;
+                  });
+                }
                 scheduleBottomSync(20);
               } catch {}
             });
@@ -188,6 +207,49 @@ export default function ChatScreen({ route, navigation }) {
       }
     };
   }, []);
+
+  const canRequestMealAnalysis = (item) => {
+    const j = item?.aiFoodItemsJson;
+    if (j != null && String(j).trim().length > 0) return false;
+    return true;
+  };
+
+  const handleAnalyzeMeal = async (item) => {
+    if (!conversationId || !item?.id) return;
+    setMealAiUnlocked((prev) => {
+      const next = new Set(prev);
+      next.add(item.id);
+      return next;
+    });
+    setAnalyzingId(item.id);
+    try {
+      const res = await analyzeMealMessage(conversationId, item.id);
+      const dto = res?.data?.data;
+      if (dto) upsertMessage(dto);
+    } catch (e) {
+      const status = e?.response?.status;
+      const message = String(e?.response?.data?.message || e?.message || '').toLowerCase();
+      const code = String(e?.code || '').toLowerCase();
+      const isTransientAnalyzeError =
+        // Request timed out on client/proxy while backend may still be analyzing.
+        code === 'econnaborted' ||
+        message.includes('timeout') ||
+        // Network dropped temporarily; polling/ws can still fetch final result.
+        message === 'network error' ||
+        message.includes('network request failed') ||
+        // Abort/cancel should be silent for this action.
+        code === 'err_canceled' ||
+        message.includes('canceled') ||
+        // Retry-safe server states that do not need noisy alert.
+        status === 408 || status === 429 || status === 502 || status === 503 || status === 504;
+
+      if (!isTransientAnalyzeError) {
+        showAlert({ title: 'Lỗi', message: e.response?.data?.message || 'Không phân tích được', type: 'error' });
+      }
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
 
   const resolveImageUrl = (url) => {
     if (!url) return null;
@@ -240,21 +302,47 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const renderItem = ({ item }) => {
-    const isMe = item.senderId === user?.id;
-    const parsed = item.aiFoodItemsJson ? safeParseFoods(item.aiFoodItemsJson) : null;
-    const foodLine = parsed?.names?.length ? `Món ăn: ${parsed.names.join(', ')}` : null;
-    const noteLine = parsed?.note || item.aiNote;
+    const isMe = user?.id != null && Number(item.senderId) === Number(user.id);
     const imageUri = item.imageUrl ? resolveImageUrl(item.imageUrl) : null;
+    const hasAiPayload =
+      (item.aiFoodItemsJson != null && String(item.aiFoodItemsJson).trim() !== '') ||
+      (item.aiNote != null && String(item.aiNote).trim() !== '');
+    const showMealAiOutput = !!imageUri && mealAiUnlocked.has(item.id) && hasAiPayload;
+
+    let foodLine = null;
+    let noteLine = null;
+    if (showMealAiOutput) {
+      const parsed = item.aiFoodItemsJson ? safeParseFoods(item.aiFoodItemsJson) : null;
+      foodLine = parsed?.names?.length ? `Món ăn: ${parsed.names.join(', ')}` : null;
+      noteLine = parsed?.note || item.aiNote;
+    }
+
+    const showMealAiBtn = isMe && imageUri && canRequestMealAnalysis(item);
 
     return (
       <View style={[styles.row, isMe ? styles.rowMe : styles.rowOther]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
           {imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.image}
-              onError={(e) => console.warn('Chat image load failed', imageUri, e?.nativeEvent?.error)}
-            />
+            <View style={styles.imageRow}>
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.image}
+                onError={(e) => console.warn('Chat image load failed', imageUri, e?.nativeEvent?.error)}
+              />
+              {showMealAiBtn ? (
+                <TouchableOpacity
+                  style={[styles.aiAnalyzeBtn, isMe && styles.aiAnalyzeBtnMe]}
+                  onPress={() => handleAnalyzeMeal(item)}
+                  disabled={sending || analyzingId === item.id}
+                >
+                  {analyzingId === item.id ? (
+                    <ActivityIndicator color="#0f766e" size="small" />
+                  ) : (
+                    <Text style={styles.aiAnalyzeBtnText}>AI phân tích</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : null}
           {item.text ? (
             <Text style={[styles.text, { fontSize: baseFontSize, lineHeight: baseLineHeight }, isMe ? styles.textMe : styles.textOther]}>
@@ -396,7 +484,19 @@ const styles = StyleSheet.create({
   textMe: { color: '#fff' },
   textOther: { color: '#1f2937' },
   time: { fontSize: 10, color: '#9ca3af', marginTop: 6, textAlign: 'right' },
-  image: { width: 220, height: 220, borderRadius: 12, marginBottom: 8, backgroundColor: '#e5e7eb' },
+  imageRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  image: { width: 220, height: 220, borderRadius: 12, backgroundColor: '#e5e7eb' },
+  aiAnalyzeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiAnalyzeBtnMe: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' },
+  aiAnalyzeBtnText: { color: '#0f766e', fontWeight: '700', fontSize: 13, textAlign: 'center' },
   ai: { marginTop: 8, color: '#111827', fontWeight: '800' },
   aiBlock: { marginTop: 6 },
   aiHeading: { fontWeight: '800', color: '#111827', marginTop: 6 },

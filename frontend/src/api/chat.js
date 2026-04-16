@@ -16,3 +16,6 @@ export const sendText = (conversationId, text) =>
 export const sendImage = (conversationId, formData) =>
   api.post(`/chat/conversations/${conversationId}/messages/image`, formData);
 
+export const analyzeMealMessage = (conversationId, messageId) =>
+  api.post(`/chat/conversations/${conversationId}/messages/${messageId}/meal-analysis`);
+

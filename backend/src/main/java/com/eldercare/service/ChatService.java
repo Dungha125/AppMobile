@@ -24,7 +24,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -138,48 +137,91 @@ public class ChatService {
                 .sender(sender)
                 .text(text == null ? null : text.trim())
                 .imageUrl(imageUrl)
-                .aiNote("Đang phân tích bữa ăn...")
                 .build();
         msg = messageRepository.save(msg);
 
         ChatMessageDto dto = toDto(msg);
         messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, dto);
-
-        Long messageId = msg.getId();
-        String mime = image.getContentType();
-        byte[] bytes;
-        try {
-            bytes = image.getBytes();
-        } catch (IOException e) {
-            bytes = null;
-        }
-        final byte[] bytesFinal = bytes;
-        if (bytesFinal != null) {
-            CompletableFuture.runAsync(() -> runAiAnalysis(conversationId, messageId, bytesFinal, mime));
-        }
         return dto;
     }
 
-    private void runAiAnalysis(Long conversationId, Long messageId, byte[] bytes, String mime) {
+    @Transactional
+    public ChatMessageDto analyzeMealImageForMessage(Long conversationId, Long messageId, Long userId) {
+        Conversation c = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Khong tim thay hoi thoai"));
+        requireParticipant(c, userId);
+
+        Message msg = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Khong tim thay tin nhan"));
+        if (msg.getConversation() == null || !conversationId.equals(msg.getConversation().getId())) {
+            throw new RuntimeException("Tin nhan khong thuoc hoi thoai nay");
+        }
+        if (msg.getSender() == null || !userId.equals(msg.getSender().getId())) {
+            throw new RuntimeException("Chi nguoi gui anh moi co the phan tich");
+        }
+        if (msg.getImageUrl() == null || msg.getImageUrl().isBlank()) {
+            throw new RuntimeException("Tin nhan khong co anh");
+        }
+
+        byte[] bytes = readUploadBytes(msg.getImageUrl());
+        String mime = probeMime(msg.getImageUrl());
+
         try {
             var resultOpt = foodAiService.analyzeMealImage(bytes, mime);
-            Message msg = messageRepository.findById(messageId).orElse(null);
-            if (msg == null) return;
             if (resultOpt.isEmpty()) {
-                // hiển thị rõ lỗi cấu hình / gọi AI cho client thay vì im lặng
-                msg.setAiNote("AI chưa cấu hình hoặc không gọi được. Kiểm tra `ai_provider`, `ai_google_api_key`, `ai_google_model` (hoặc OpenAI key/model), quyền mạng và quota.");
-                messageRepository.save(msg);
-                messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, toDto(msg));
-                return;
+                msg.setAiNote("AI chua cau hinh hoac khong goi duoc. Kiem tra ai_provider, ai_google_api_key, ai_google_model (hoac OpenAI key/model), quyen mang va quota.");
+                msg.setAiFoodItemsJson(null);
+            } else {
+                var r = resultOpt.get();
+                msg.setAiFoodItemsJson(r.getFoodItemsJson());
+                msg.setAiNote(r.getNote());
             }
-            var r = resultOpt.get();
-            msg.setAiFoodItemsJson(r.getFoodItemsJson());
-            msg.setAiNote(r.getNote());
-            messageRepository.save(msg);
-            messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, toDto(msg));
         } catch (Exception e) {
             log.warn("AI analysis failed: {}", e.getMessage());
+            msg.setAiFoodItemsJson(null);
+            msg.setAiNote("Phan tich that bai. Thu lai sau.");
         }
+        msg = messageRepository.save(msg);
+        ChatMessageDto dto = toDto(msg);
+        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, dto);
+        return dto;
+    }
+
+    private byte[] readUploadBytes(String imageUrl) {
+        if (imageUrl == null || !imageUrl.startsWith("/uploads/")) {
+            throw new RuntimeException("Anh khong hop le");
+        }
+        String name = imageUrl.substring("/uploads/".length());
+        if (name.isBlank() || name.contains("..") || name.contains("/") || name.contains("\\")) {
+            throw new RuntimeException("Anh khong hop le");
+        }
+        try {
+            Path base = Paths.get("uploads").toAbsolutePath().normalize();
+            Path file = base.resolve(name).normalize();
+            if (!file.startsWith(base)) {
+                throw new RuntimeException("Anh khong hop le");
+            }
+            return Files.readAllBytes(file);
+        } catch (IOException e) {
+            throw new RuntimeException("Khong doc duoc anh");
+        }
+    }
+
+    private String probeMime(String imageUrl) {
+        try {
+            String name = imageUrl.substring("/uploads/".length());
+            Path base = Paths.get("uploads").toAbsolutePath().normalize();
+            Path file = base.resolve(name).normalize();
+            if (!file.startsWith(base)) return "image/jpeg";
+            String probed = Files.probeContentType(file);
+            if (probed != null && !probed.isBlank()) return probed;
+        } catch (Exception ignored) {
+        }
+        String lower = imageUrl.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".gif")) return "image/gif";
+        return "image/jpeg";
     }
 
     private String saveUpload(MultipartFile file) {

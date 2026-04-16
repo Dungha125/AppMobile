@@ -16,4 +16,6 @@ public interface CheckInRepository extends JpaRepository<CheckIn, Long> {
 
     Optional<CheckIn> findFirstByElderlyIdAndCheckedAtBetweenOrderByCheckedAtDesc(
             Long elderlyId, LocalDateTime start, LocalDateTime end);
+
+    void deleteByElderly_Id(Long elderlyId);
 }

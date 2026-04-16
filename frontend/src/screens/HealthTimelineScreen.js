@@ -12,6 +12,8 @@ import { useAlert } from '../utils/showAlert';
 import { createHealthEntry, deleteHealthEntry, getHealthEntries } from '../api/health';
 import { useAuth } from '../context/AuthContext';
 import { useSilentPolling } from '../utils/useSilentPolling';
+import { formatViHealthNumber } from '../utils/healthFormat';
+import HealthTrendChart from '../components/HealthTrendChart';
 
 function fmt(dt) {
   if (!dt) return '';
@@ -84,6 +86,8 @@ export default function HealthTimelineScreen({ route, navigation }) {
         </TouchableOpacity>
       )}
 
+      {list.length > 0 ? <HealthTrendChart entries={list} /> : null}
+
       {list.map((e) => (
         <TouchableOpacity
           key={e.id}
@@ -102,11 +106,11 @@ export default function HealthTimelineScreen({ route, navigation }) {
           <Text style={styles.meta}>Người ghi: {e.recordedByName || '—'}</Text>
 
           <View style={styles.grid}>
-            <Info label="Huyết áp" value={e.systolic && e.diastolic ? `${e.systolic}/${e.diastolic}` : '—'} unit="mmHg" />
-            <Info label="Nhịp tim" value={e.heartRate ?? '—'} unit="bpm" />
-            <Info label="Đường huyết" value={e.bloodGlucose ?? '—'} unit="mmol/L" />
-            <Info label="Nhiệt độ" value={e.temperature ?? '—'} unit="°C" />
-            <Info label="Cân nặng" value={e.weight ?? '—'} unit="kg" />
+            <Info label="Huyết áp" value={e.systolic && e.diastolic ? `${formatViHealthNumber(e.systolic)}/${formatViHealthNumber(e.diastolic)}` : '—'} unit="mmHg" />
+            <Info label="Nhịp tim" value={formatViHealthNumber(e.heartRate)} unit="bpm" />
+            <Info label="Đường huyết" value={formatViHealthNumber(e.bloodGlucose)} unit="mmol/L" />
+            <Info label="Nhiệt độ" value={formatViHealthNumber(e.temperature)} unit="°C" />
+            <Info label="Cân nặng" value={formatViHealthNumber(e.weight)} unit="kg" />
           </View>
 
           {e.note ? <Text style={styles.note}>Ghi chú: {e.note}</Text> : null}

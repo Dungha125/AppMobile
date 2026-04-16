@@ -11,4 +11,6 @@ public interface ElderlyProfileRepository extends JpaRepository<ElderlyProfile, 
     Optional<ElderlyProfile> findByUser(User user);
 
     Optional<ElderlyProfile> findByUserId(Long userId);
+
+    void deleteByUser_Id(Long userId);
 }

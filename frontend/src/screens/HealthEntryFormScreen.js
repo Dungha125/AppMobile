@@ -2,25 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useAlert } from '../utils/showAlert';
 import { createHealthEntry, updateHealthEntry } from '../api/health';
-
-function numOrNull(s) {
-  const t = (s ?? '').toString().trim();
-  if (!t) return null;
-  const n = Number(t);
-  if (Number.isNaN(n)) return null;
-  return n;
-}
+import { parseHealthNumberInput, healthNumberToInputString } from '../utils/healthFormat';
 
 export default function HealthEntryFormScreen({ route, navigation }) {
   const { elderlyId, elderlyName, mode, entry } = route.params || {};
   const { showAlert } = useAlert();
 
-  const [systolic, setSystolic] = useState(entry?.systolic?.toString?.() || '');
-  const [diastolic, setDiastolic] = useState(entry?.diastolic?.toString?.() || '');
-  const [heartRate, setHeartRate] = useState(entry?.heartRate?.toString?.() || '');
-  const [bloodGlucose, setBloodGlucose] = useState(entry?.bloodGlucose?.toString?.() || '');
-  const [temperature, setTemperature] = useState(entry?.temperature?.toString?.() || '');
-  const [weight, setWeight] = useState(entry?.weight?.toString?.() || '');
+  const [systolic, setSystolic] = useState(entry?.systolic != null ? String(entry.systolic) : '');
+  const [diastolic, setDiastolic] = useState(entry?.diastolic != null ? String(entry.diastolic) : '');
+  const [heartRate, setHeartRate] = useState(entry?.heartRate != null ? String(entry.heartRate) : '');
+  const [bloodGlucose, setBloodGlucose] = useState(healthNumberToInputString(entry?.bloodGlucose));
+  const [temperature, setTemperature] = useState(healthNumberToInputString(entry?.temperature));
+  const [weight, setWeight] = useState(healthNumberToInputString(entry?.weight));
   const [note, setNote] = useState(entry?.note || '');
   const [saving, setSaving] = useState(false);
 
@@ -33,12 +26,12 @@ export default function HealthEntryFormScreen({ route, navigation }) {
     setSaving(true);
     try {
       const payload = {
-        systolic: numOrNull(systolic),
-        diastolic: numOrNull(diastolic),
-        heartRate: numOrNull(heartRate),
-        bloodGlucose: numOrNull(bloodGlucose),
-        temperature: numOrNull(temperature),
-        weight: numOrNull(weight),
+        systolic: parseHealthNumberInput(systolic),
+        diastolic: parseHealthNumberInput(diastolic),
+        heartRate: parseHealthNumberInput(heartRate),
+        bloodGlucose: parseHealthNumberInput(bloodGlucose),
+        temperature: parseHealthNumberInput(temperature),
+        weight: parseHealthNumberInput(weight),
         note: note?.trim() || null,
       };
 
@@ -66,11 +59,11 @@ export default function HealthEntryFormScreen({ route, navigation }) {
         </Row>
         <Row>
           <Field label="Nhịp tim (bpm)" value={heartRate} onChange={setHeartRate} placeholder="vd: 72" />
-          <Field label="Đường huyết (mmol/L)" value={bloodGlucose} onChange={setBloodGlucose} placeholder="vd: 5.6" />
+          <Field label="Đường huyết (mmol/L)" value={bloodGlucose} onChange={setBloodGlucose} placeholder="vd: 5,6" />
         </Row>
         <Row>
-          <Field label="Nhiệt độ (°C)" value={temperature} onChange={setTemperature} placeholder="vd: 36.7" />
-          <Field label="Cân nặng (kg)" value={weight} onChange={setWeight} placeholder="vd: 58.5" />
+          <Field label="Nhiệt độ (°C)" value={temperature} onChange={setTemperature} placeholder="vd: 36,7" />
+          <Field label="Cân nặng (kg)" value={weight} onChange={setWeight} placeholder="vd: 58,5" />
         </Row>
 
         <Text style={styles.label}>Ghi chú</Text>

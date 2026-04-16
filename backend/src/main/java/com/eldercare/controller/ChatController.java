@@ -61,5 +61,16 @@ public class ChatController {
         ChatMessageDto dto = chatService.sendImage(conversationId, currentUser.getUserId(), image, text);
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
+
+    @PostMapping("/conversations/{id}/messages/{messageId}/meal-analysis")
+    public ResponseEntity<ApiResponse<ChatMessageDto>> analyzeMeal(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @PathVariable("id") Long conversationId,
+            @PathVariable Long messageId
+    ) {
+        if (currentUser == null) return ResponseEntity.status(401).body(ApiResponse.error("Chưa đăng nhập"));
+        ChatMessageDto dto = chatService.analyzeMealImageForMessage(conversationId, messageId, currentUser.getUserId());
+        return ResponseEntity.ok(ApiResponse.success(dto));
+    }
 }
 
